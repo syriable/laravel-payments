@@ -5,9 +5,9 @@ All notable changes to `syriable/laravel-payments` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased](https://github.com/syriable/laravel-payments/compare/v0.1.0...HEAD)
 
-## [0.1.0] - 2026-05-20
+## [0.1.0](https://github.com/syriable/laravel-payments/releases/tag/v0.1.0) - 2026-05-20
 
 First public release. The `0.x` series is functional and tested, but the
 public API may still change before `1.0.0` in response to real-world use.
@@ -52,5 +52,6 @@ public API may still change before `1.0.0` in response to real-world use.
 - The package ships no migrations and no Eloquent models. It never touches
   your database; persisting payments is the consuming application's concern.
 
-[Unreleased]: https://github.com/syriable/laravel-payments/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/syriable/laravel-payments/releases/tag/v0.1.0
+## [v0.1.0](https://github.com/syriable/laravel-payments/compare/v0.1.0...v0.1.0) - 2026-05-20
+
+**Full Changelog**: https://github.com/syriable/laravel-payments/commits/v0.1.0
