@@ -77,7 +77,7 @@ it('returns 404 for an unknown gateway', function (): void {
 it('dispatches PaymentRefunded for a refund webhook from a custom gateway', function (): void {
     Event::fake([PaymentRefunded::class]);
 
-    Gateway::extend('demo', static fn () => new class implements GatewayContract
+    Gateway::extend('demo', fn () => new class implements GatewayContract
     {
         public function name(): string
         {

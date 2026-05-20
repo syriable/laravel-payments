@@ -8,10 +8,10 @@
 
 <p align="center">
     <a href="https://packagist.org/packages/syriable/laravel-payments"><img src="https://img.shields.io/packagist/v/syriable/laravel-payments.svg?style=flat-square" alt="Latest Version on Packagist"></a>
-    <a href="https://github.com/syriable/laravel-payments/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/syriable/laravel-payments/tests.yml?branch=main&label=tests&style=flat-square" alt="Tests"></a>
+    <a href="https://github.com/syriable/laravel-payments/actions/workflows/run-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/syriable/laravel-payments/run-tests.yml?branch=main&label=tests&style=flat-square" alt="Tests"></a>
     <a href="https://packagist.org/packages/syriable/laravel-payments"><img src="https://img.shields.io/packagist/dt/syriable/laravel-payments.svg?style=flat-square" alt="Total Downloads"></a>
     <a href="https://packagist.org/packages/syriable/laravel-payments"><img src="https://img.shields.io/packagist/php-v/syriable/laravel-payments.svg?style=flat-square" alt="PHP Version"></a>
-    <a href="LICENSE.md"><img src="https://img.shields.io/packagist/l/syriable/laravel-payments.svg?style=flat-square" alt="License"></a>
+    <a href="https://github.com/syriable/laravel-payments/blob/main/LICENSE.md"><img src="https://img.shields.io/github/license/syriable/laravel-payments?style=flat-square" alt="License"></a>
 </p>
 
 # Laravel Payments

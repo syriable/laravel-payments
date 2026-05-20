@@ -70,7 +70,7 @@ it('registers a custom gateway through extend()', function (): void {
         }
     };
 
-    GatewayFacade::extend('paymob', static fn (): Gateway => $custom);
+    GatewayFacade::extend('paymob', fn (): Gateway => $custom);
 
     expect(GatewayFacade::gateway('paymob'))->toBe($custom)
         ->and(GatewayFacade::gateway('paymob')->name())->toBe('paymob');
@@ -99,7 +99,7 @@ it('does not claim capabilities a gateway lacks', function (): void {
         }
     };
 
-    GatewayFacade::extend('cash', static fn (): Gateway => $minimal);
+    GatewayFacade::extend('cash', fn (): Gateway => $minimal);
 
     expect(GatewayFacade::gateway('cash'))
         ->not->toBeInstanceOf(Refundable::class)
