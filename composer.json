@@ -1,0 +1,72 @@
+{
+    "name": "syriable/laravel-payments",
+    "description": "A lightweight Laravel package for accepting payments through Stripe, PayPal, and an open ecosystem of community gateway plugins.",
+    "keywords": [
+        "syriable",
+        "laravel",
+        "payments",
+        "payment-gateway",
+        "stripe",
+        "paypal",
+        "checkout",
+        "webhooks"
+    ],
+    "homepage": "https://github.com/syriable/laravel-payments",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Syriable",
+            "email": "hello@syriable.dev",
+            "role": "Maintainer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/http": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "spatie/laravel-package-tools": "^1.92"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "phpstan/phpstan": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Syriable\\Payments\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Syriable\\Payments\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=512M",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Syriable\\Payments\\PaymentsServiceProvider"
+            ],
+            "aliases": {
+                "Gateway": "Syriable\\Payments\\Facades\\Gateway"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
