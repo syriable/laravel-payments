@@ -216,6 +216,19 @@ Invalid signatures return `403` and dispatch nothing. Unknown gateways return
 > default config uses `api`; change `webhook.middleware` only to something
 > equally CSRF-free.
 
+## Observability
+
+The package logs the money-movement boundaries — `payments.checkout.created`,
+`payments.refund.issued`, `payments.webhook.received`, `payments.webhook.duplicate`,
+and `payments.webhook.invalid_signature` — with ids, references, and amounts
+(never secrets or full payloads). Route them to their own channel:
+
+```env
+PAYMENT_LOG_CHANNEL=payments
+```
+
+Leave it unset to use the application's default channel.
+
 ## Adding a custom gateway
 
 Two ways. For a one-off, register it in `AppServiceProvider::boot()`:

@@ -19,6 +19,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Logging
+    |--------------------------------------------------------------------------
+    |
+    | Channel used for payment activity logs (checkout, refund, webhook). Set
+    | to null to use the application's default log channel.
+    |
+    */
+
+    'logging' => [
+        'channel' => env('PAYMENT_LOG_CHANNEL'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Webhook Route
     |--------------------------------------------------------------------------
     |

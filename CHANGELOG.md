@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dispatches payment events from a `ProcessWebhookEvent` job, configurable via
   `webhook.connection` / `webhook.queue`, so slow listeners can't trigger
   gateway retries.
+- Structured logging of the money-movement boundaries (checkout, refund, and
+  webhook received/duplicate/invalid-signature) on a configurable channel
+  (`logging.channel`). Only ids, references, and amounts are logged — never
+  secrets or full payloads.
 
 ### Changed
 

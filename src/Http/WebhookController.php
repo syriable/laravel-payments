@@ -12,6 +12,7 @@ use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\GatewayManager;
 use Syriable\Payments\Jobs\ProcessWebhookEvent;
+use Syriable\Payments\Support\PaymentLog;
 
 /**
  * The package's single webhook entrypoint.
@@ -41,13 +42,28 @@ final class WebhookController
         try {
             $event = $driver->webhook($request);
         } catch (InvalidWebhookSignature) {
+            PaymentLog::warning('payments.webhook.invalid_signature', ['gateway' => $gateway]);
+
             return new Response('Invalid signature', 403);
         }
 
         // Gateways legitimately redeliver; drop duplicates before dispatching.
         if ($this->alreadyProcessed($event)) {
+            PaymentLog::info('payments.webhook.duplicate', [
+                'gateway' => $event->gateway,
+                'event_id' => $event->eventId,
+            ]);
+
             return new Response('OK', 200);
         }
+
+        PaymentLog::info('payments.webhook.received', [
+            'gateway' => $event->gateway,
+            'type' => $event->type->value,
+            'event_id' => $event->eventId,
+            'payment_id' => $event->paymentId,
+            'reference' => $event->reference,
+        ]);
 
         // Acknowledge fast; do the business processing off the request cycle.
         $connection = config('payment-gateways.webhook.connection');

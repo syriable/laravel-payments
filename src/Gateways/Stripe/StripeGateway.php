@@ -19,6 +19,7 @@ use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
+use Syriable\Payments\Support\PaymentLog;
 
 /**
  * Stripe gateway driver.
@@ -101,6 +102,14 @@ final class StripeGateway implements Gateway, Refundable
 
         $url = $session['url'] ?? null;
 
+        PaymentLog::info('payments.checkout.created', [
+            'gateway' => self::NAME,
+            'reference' => $checkout->reference,
+            'payment_id' => (string) ($session['id'] ?? ''),
+            'amount' => $checkout->amount,
+            'currency' => $checkout->currency,
+        ]);
+
         return new PaymentResult(
             id: (string) ($session['id'] ?? ''),
             status: PaymentStatus::Pending,
@@ -163,6 +172,13 @@ final class StripeGateway implements Gateway, Refundable
 
         /** @var array<string, mixed> $refund */
         $refund = (array) $response->json();
+
+        PaymentLog::info('payments.refund.issued', [
+            'gateway' => self::NAME,
+            'payment_id' => $paymentId,
+            'refund_id' => (string) ($refund['id'] ?? ''),
+            'amount' => $amount,
+        ]);
 
         return new PaymentResult(
             id: (string) ($refund['id'] ?? ''),
