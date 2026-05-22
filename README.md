@@ -110,7 +110,7 @@ return redirect($result->redirectUrl);
 
 ```php
 $result->id;            // gateway's payment/session id
-$result->status;        // PaymentStatus enum: Pending | Paid | Failed | Refunded
+$result->status;        // PaymentStatus enum (Pending, RequiresAction, Processing, Paid, Failed, Canceled, PartiallyRefunded, Refunded)
 $result->redirectUrl;   // hosted-checkout URL, if any
 $result->raw;           // full untouched gateway response
 ```

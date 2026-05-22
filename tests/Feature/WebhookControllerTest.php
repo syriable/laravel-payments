@@ -9,6 +9,7 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Events\PaymentFailed;
 use Syriable\Payments\Events\PaymentRefunded;
 use Syriable\Payments\Events\PaymentSucceeded;
@@ -115,7 +116,7 @@ it('dispatches PaymentRefunded for a refund webhook from a custom gateway', func
 
         public function webhook(Request $request): WebhookEvent
         {
-            return new WebhookEvent('demo', 'payment.refunded', 'd1');
+            return new WebhookEvent('demo', WebhookEventType::Refunded, 'd1');
         }
     });
 

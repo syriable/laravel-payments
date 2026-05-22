@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace Syriable\Payments\Data;
 
+use Syriable\Payments\Enums\WebhookEventType;
+
 /**
  * A normalized webhook event.
  *
- * $type uses a stable, cross-gateway vocabulary:
- *   - "payment.succeeded"
- *   - "payment.failed"
- *   - "payment.refunded"
- *   - "payment.{anything-else}" passed through from the gateway when no
- *     canonical mapping exists
+ * $type is a WebhookEventType from a closed, cross-gateway vocabulary;
+ * events without a canonical mapping arrive as WebhookEventType::Unknown
+ * (the original gateway name is still in $payload).
  *
  * $gateway is the canonical driver name (e.g. "stripe"), useful for
  * listeners that handle multiple gateways.
@@ -39,7 +38,7 @@ final readonly class WebhookEvent
      */
     public function __construct(
         public string $gateway,
-        public string $type,
+        public WebhookEventType $type,
         public string $paymentId,
         public array $payload = [],
         public ?string $reference = null,

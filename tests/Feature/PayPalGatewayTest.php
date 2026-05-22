@@ -6,6 +6,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
 use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Gateways\PayPal\PayPalGateway;
 
@@ -163,7 +164,7 @@ it('verifies a webhook by calling paypal verification endpoint', function (): vo
     $event = (new PayPalGateway(paypalConfig(), $http))->webhook($request);
 
     expect($event->gateway)->toBe('paypal')
-        ->and($event->type)->toBe('payment.succeeded')
+        ->and($event->type)->toBe(WebhookEventType::Succeeded)
         ->and($event->paymentId)->toBe('CAPTURE-9');
 });
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Syriable\Payments\Data\WebhookEvent;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Events\PaymentRefunded;
 use Syriable\Payments\Events\PaymentSucceeded;
 use Syriable\Payments\Jobs\ProcessWebhookEvent;
@@ -34,7 +35,7 @@ it('queues processing instead of dispatching inline', function (): void {
 it('dispatches the canonical event when the job runs', function (): void {
     Event::fake([PaymentSucceeded::class]);
 
-    (new ProcessWebhookEvent(new WebhookEvent('stripe', 'payment.succeeded', 'pi_1')))->handle();
+    (new ProcessWebhookEvent(new WebhookEvent('stripe', WebhookEventType::Succeeded, 'pi_1')))->handle();
 
     Event::assertDispatched(PaymentSucceeded::class);
 });
@@ -42,7 +43,7 @@ it('dispatches the canonical event when the job runs', function (): void {
 it('maps a refunded webhook type to the refunded event', function (): void {
     Event::fake([PaymentRefunded::class]);
 
-    (new ProcessWebhookEvent(new WebhookEvent('stripe', 'payment.refunded', 'pi_1')))->handle();
+    (new ProcessWebhookEvent(new WebhookEvent('stripe', WebhookEventType::Refunded, 'pi_1')))->handle();
 
     Event::assertDispatched(PaymentRefunded::class);
 });

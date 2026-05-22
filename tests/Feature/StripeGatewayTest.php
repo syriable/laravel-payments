@@ -6,6 +6,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Request;
 use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
 use Syriable\Payments\Gateways\Stripe\StripeGateway;
@@ -138,7 +139,7 @@ it('verifies a valid webhook signature and normalizes the event', function (): v
     $event = stripeGateway(new HttpFactory)->webhook($request);
 
     expect($event->gateway)->toBe('stripe')
-        ->and($event->type)->toBe('payment.succeeded')
+        ->and($event->type)->toBe(WebhookEventType::Succeeded)
         ->and($event->paymentId)->toBe('cs_test_123');
 });
 
@@ -265,5 +266,34 @@ it('maps stripe refund events to the canonical refunded type', function (): void
         content: $body,
     );
 
-    expect(stripeGateway(new HttpFactory)->webhook($request)->type)->toBe('payment.refunded');
+    expect(stripeGateway(new HttpFactory)->webhook($request)->type)->toBe(WebhookEventType::Refunded);
 });
+
+it('maps an unmapped stripe event to the unknown type', function (): void {
+    $secret = 'whsec_test_x';
+    $body = json_encode(['id' => 'evt_x', 'type' => 'charge.dispute.created', 'data' => ['object' => ['id' => 'dp_1']]]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+    $request = Request::create(
+        '/payment-gateways/webhook/stripe',
+        'POST',
+        server: ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}"],
+        content: $body,
+    );
+
+    expect(stripeGateway(new HttpFactory)->webhook($request)->type)->toBe(WebhookEventType::Unknown);
+});
+
+it('maps richer payment intent statuses on retrieve', function (string $status, PaymentStatus $expected): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/payment_intents/pi_x' => $http->response(['id' => 'pi_x', 'status' => $status], 200),
+    ]);
+
+    expect(stripeGateway($http)->retrieve('pi_x')->status)->toBe($expected);
+})->with([
+    'requires action' => ['requires_action', PaymentStatus::RequiresAction],
+    'processing' => ['processing', PaymentStatus::Processing],
+    'canceled' => ['canceled', PaymentStatus::Canceled],
+]);

@@ -10,6 +10,7 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Facades\Gateway as GatewayFacade;
 use Syriable\Payments\GatewayManager;
@@ -71,7 +72,7 @@ it('registers a custom gateway through extend()', function (): void {
 
         public function webhook(Request $request): WebhookEvent
         {
-            return new WebhookEvent('paymob', 'payment.succeeded', 'paymob_1');
+            return new WebhookEvent('paymob', WebhookEventType::Succeeded, 'paymob_1');
         }
     };
 
@@ -105,7 +106,7 @@ it('does not claim capabilities a gateway lacks', function (): void {
 
         public function webhook(Request $request): WebhookEvent
         {
-            return new WebhookEvent('cash', 'payment.succeeded', 'cash_1');
+            return new WebhookEvent('cash', WebhookEventType::Succeeded, 'cash_1');
         }
     };
 

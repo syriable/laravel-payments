@@ -29,6 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `webhook.connection` / `webhook.queue`, so slow listeners can't trigger
   gateway retries.
 
+### Changed
+
+- `PaymentStatus` gained `RequiresAction`, `Processing`, `Canceled`, and
+  `PartiallyRefunded` so SCA/3DS and cancellation flows are representable; the
+  drivers now map these on `retrieve()`.
+- `WebhookEvent::$type` is now a `WebhookEventType` enum (`Succeeded`,
+  `Failed`, `Refunded`, `Unknown`) instead of a raw string, making the
+  dispatch match exhaustive. Compare against the enum (the original gateway
+  event name remains in `$payload`).
+
 ### Fixed
 
 - Stripe webhooks now carry the checkout reference on `payment_intent.*`

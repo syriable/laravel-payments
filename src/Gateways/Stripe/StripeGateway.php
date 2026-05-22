@@ -15,6 +15,7 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
@@ -249,7 +250,9 @@ final class StripeGateway implements Gateway, Refundable
 
         return match (true) {
             $status === 'succeeded', $status === 'complete', $paymentStatus === 'paid' => PaymentStatus::Paid,
-            $status === 'canceled', $status === 'expired' => PaymentStatus::Failed,
+            $status === 'processing' => PaymentStatus::Processing,
+            str_starts_with($status, 'requires_') => PaymentStatus::RequiresAction,
+            $status === 'canceled', $status === 'expired' => PaymentStatus::Canceled,
             default => PaymentStatus::Pending,
         };
     }
@@ -295,13 +298,13 @@ final class StripeGateway implements Gateway, Refundable
         return is_string($currency) && $currency !== '' ? strtoupper($currency) : null;
     }
 
-    private function normalizeEventType(string $stripeType): string
+    private function normalizeEventType(string $stripeType): WebhookEventType
     {
         return match ($stripeType) {
-            'checkout.session.completed', 'payment_intent.succeeded' => 'payment.succeeded',
-            'payment_intent.payment_failed', 'checkout.session.expired' => 'payment.failed',
-            'charge.refunded' => 'payment.refunded',
-            default => 'payment.'.$stripeType,
+            'checkout.session.completed', 'payment_intent.succeeded' => WebhookEventType::Succeeded,
+            'payment_intent.payment_failed', 'checkout.session.expired' => WebhookEventType::Failed,
+            'charge.refunded' => WebhookEventType::Refunded,
+            default => WebhookEventType::Unknown,
         };
     }
 

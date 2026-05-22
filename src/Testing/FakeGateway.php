@@ -12,6 +12,7 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 
 /**
  * In-memory fake gateway used by Gateway::fake().
@@ -93,7 +94,7 @@ final class FakeGateway implements Capturable, Gateway, Refundable
 
         return new WebhookEvent(
             gateway: $this->name,
-            type: 'payment.succeeded',
+            type: WebhookEventType::Succeeded,
             paymentId: 'fake_webhook_payment',
             payload: $payload,
         );

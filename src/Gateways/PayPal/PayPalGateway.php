@@ -15,6 +15,7 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
@@ -284,20 +285,21 @@ final class PayPalGateway implements Gateway, Refundable
     {
         return match ($status) {
             'COMPLETED' => PaymentStatus::Paid,
-            'VOIDED' => PaymentStatus::Failed,
+            'VOIDED' => PaymentStatus::Canceled,
+            'PAYER_ACTION_REQUIRED' => PaymentStatus::RequiresAction,
             default => PaymentStatus::Pending,
         };
     }
 
-    private function normalizeEventType(string $paypalType): string
+    private function normalizeEventType(string $paypalType): WebhookEventType
     {
         return match ($paypalType) {
             'CHECKOUT.ORDER.APPROVED',
-            'PAYMENT.CAPTURE.COMPLETED' => 'payment.succeeded',
+            'PAYMENT.CAPTURE.COMPLETED' => WebhookEventType::Succeeded,
             'PAYMENT.CAPTURE.DENIED',
-            'PAYMENT.CAPTURE.DECLINED' => 'payment.failed',
-            'PAYMENT.CAPTURE.REFUNDED' => 'payment.refunded',
-            default => 'payment.'.strtolower(str_replace('.', '_', $paypalType)),
+            'PAYMENT.CAPTURE.DECLINED' => WebhookEventType::Failed,
+            'PAYMENT.CAPTURE.REFUNDED' => WebhookEventType::Refunded,
+            default => WebhookEventType::Unknown,
         };
     }
 

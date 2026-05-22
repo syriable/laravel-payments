@@ -10,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Syriable\Payments\Data\WebhookEvent;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Events\PaymentFailed;
 use Syriable\Payments\Events\PaymentRefunded;
 use Syriable\Payments\Events\PaymentSucceeded;
@@ -30,11 +31,11 @@ final class ProcessWebhookEvent implements ShouldQueue
 
     public function handle(): void
     {
-        match (true) {
-            str_ends_with($this->event->type, '.succeeded') => PaymentSucceeded::dispatch($this->event),
-            str_ends_with($this->event->type, '.failed') => PaymentFailed::dispatch($this->event),
-            str_ends_with($this->event->type, '.refunded') => PaymentRefunded::dispatch($this->event),
-            default => null,
+        match ($this->event->type) {
+            WebhookEventType::Succeeded => PaymentSucceeded::dispatch($this->event),
+            WebhookEventType::Failed => PaymentFailed::dispatch($this->event),
+            WebhookEventType::Refunded => PaymentRefunded::dispatch($this->event),
+            WebhookEventType::Unknown => null,
         };
     }
 }
