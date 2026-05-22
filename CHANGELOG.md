@@ -89,28 +89,29 @@ work and is a breaking change from 0.1.0; see **Upgrading** below.
 
 1. **Run the migration.** Webhook persistence is on by default. Publish and
    migrate:
-
+   
    ```bash
    php artisan vendor:publish --tag="laravel-payments-migrations"
    php artisan migrate
+   
    ```
-
    To keep the previous stateless behavior instead, set `webhook.store` to
    `Syriable\Payments\Store\NullWebhookStore::class`.
-
+   
 2. **`WebhookEvent::$type` is a `WebhookEventType` enum**, not a string.
    Compare against the enum; the raw gateway event name is still in `$payload`.
-
+   
 3. **`Gateway::retrieve()` is now required** by the `Gateway` contract. Custom
    gateways must implement it (return a `PaymentResult`).
-
+   
 4. **The `Capturable` contract was removed.** It was implemented only by the
    test fake. Use `UnsupportedFeature` for genuinely unsupported operations.
-
+   
 5. **`PaymentResult` gained `reference`/`amount`/`currency`** before `raw`.
    This is source-compatible if you construct it with named arguments (as the
    built-in drivers do); positional callers that passed `raw` should switch to
    named arguments.
+   
 
 ## [0.1.0](https://github.com/syriable/laravel-payments/releases/tag/v0.1.0) - 2026-05-20
 
@@ -172,3 +173,11 @@ public API may still change before `1.0.0` in response to real-world use.
 * @alkhatibsy made their first contribution in https://github.com/syriable/laravel-payments/pull/1
 
 **Full Changelog**: https://github.com/syriable/laravel-payments/compare/v0.1.0...v0.1.1
+
+## [v1.0.0](https://github.com/syriable/laravel-payments/compare/v1.0.0...v1.0.0) - 2026-05-22
+
+### What's Changed
+
+* v1.0.0: reconciliation, durable webhook delivery, typed events by @alkhatibsy in https://github.com/syriable/laravel-payments/pull/2
+
+**Full Changelog**: https://github.com/syriable/laravel-payments/compare/v0.1.1...v1.0.0
