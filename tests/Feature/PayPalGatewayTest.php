@@ -149,6 +149,27 @@ it('retrieves an order and maps a completed status to paid', function (): void {
         ->and($result->status)->toBe(PaymentStatus::Paid);
 });
 
+it('exposes reference, amount and currency on retrieve', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api-m.sandbox.paypal.com/v1/oauth2/token' => $http->response(['access_token' => 't'], 200),
+        'api-m.sandbox.paypal.com/v2/checkout/orders/ORDER-REF' => $http->response([
+            'id' => 'ORDER-REF',
+            'status' => 'COMPLETED',
+            'purchase_units' => [[
+                'custom_id' => 'order_99',
+                'amount' => ['currency_code' => 'USD', 'value' => '25.00'],
+            ]],
+        ], 200),
+    ]);
+
+    $result = (new PayPalGateway(paypalConfig(), $http))->retrieve('ORDER-REF');
+
+    expect($result->reference)->toBe('order_99')
+        ->and($result->amount)->toBe(2500)
+        ->and($result->currency)->toBe('USD');
+});
+
 it('verifies a webhook by calling paypal verification endpoint', function (): void {
     $http = new HttpFactory;
     $http->fake([
