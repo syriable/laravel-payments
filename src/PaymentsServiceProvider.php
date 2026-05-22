@@ -27,6 +27,7 @@ class PaymentsServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-payments')
             ->hasConfigFile('payment-gateways')
+            ->hasMigration('create_payment_webhook_calls_table')
             ->hasRoute('webhooks');
     }
 
