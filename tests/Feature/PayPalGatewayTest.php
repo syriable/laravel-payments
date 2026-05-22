@@ -149,6 +149,35 @@ it('verifies a webhook by calling paypal verification endpoint', function (): vo
         ->and($event->paymentId)->toBe('CAPTURE-9');
 });
 
+it('exposes our checkout reference from a capture webhook custom_id', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api-m.sandbox.paypal.com/v1/oauth2/token' => $http->response(['access_token' => 't'], 200),
+        'api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature' => $http->response([
+            'verification_status' => 'SUCCESS',
+        ], 200),
+    ]);
+
+    $request = Request::create(
+        '/payment-gateways/webhook/paypal',
+        'POST',
+        server: [
+            'HTTP_PAYPAL_AUTH_ALGO' => 'SHA256withRSA',
+            'HTTP_PAYPAL_CERT_URL' => 'https://api.sandbox.paypal.com/cert',
+            'HTTP_PAYPAL_TRANSMISSION_ID' => 'tx-1',
+            'HTTP_PAYPAL_TRANSMISSION_SIG' => 'sig-1',
+            'HTTP_PAYPAL_TRANSMISSION_TIME' => '2026-05-20T00:00:00Z',
+            'CONTENT_TYPE' => 'application/json',
+        ],
+        content: json_encode([
+            'event_type' => 'PAYMENT.CAPTURE.COMPLETED',
+            'resource' => ['id' => 'CAPTURE-9', 'custom_id' => 'order_pp_1'],
+        ]),
+    );
+
+    expect((new PayPalGateway(paypalConfig(), $http))->webhook($request)->reference)->toBe('order_pp_1');
+});
+
 it('rejects a webhook paypal reports as unverified', function (): void {
     $http = new HttpFactory;
     $http->fake([

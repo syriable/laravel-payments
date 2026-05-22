@@ -127,6 +127,65 @@ it('verifies a valid webhook signature and normalizes the event', function (): v
         ->and($event->paymentId)->toBe('cs_test_123');
 });
 
+it('exposes our checkout reference from a session webhook', function (): void {
+    $secret = 'whsec_test_x';
+    $body = json_encode([
+        'type' => 'checkout.session.completed',
+        'data' => ['object' => ['id' => 'cs_test_123', 'client_reference_id' => 'order_99']],
+    ]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+    $request = Request::create(
+        '/payment-gateways/webhook/stripe',
+        'POST',
+        server: ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}"],
+        content: $body,
+    );
+
+    expect(stripeGateway(new HttpFactory)->webhook($request)->reference)->toBe('order_99');
+});
+
+it('exposes our reference from a payment_intent webhook via metadata', function (): void {
+    $secret = 'whsec_test_x';
+    $body = json_encode([
+        'type' => 'payment_intent.succeeded',
+        'data' => ['object' => ['id' => 'pi_test_9', 'metadata' => ['reference' => 'order_99']]],
+    ]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+    $request = Request::create(
+        '/payment-gateways/webhook/stripe',
+        'POST',
+        server: ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}"],
+        content: $body,
+    );
+
+    $event = stripeGateway(new HttpFactory)->webhook($request);
+
+    expect($event->reference)->toBe('order_99')
+        ->and($event->paymentId)->toBe('pi_test_9');
+});
+
+it('propagates the reference onto the payment intent at checkout', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/checkout/sessions' => $http->response(['id' => 'cs_1', 'url' => 'https://x.test'], 200),
+    ]);
+
+    stripeGateway($http)->checkout(stripeCheckout());
+
+    $captured = null;
+    $http->recorded(function ($request) use (&$captured): bool {
+        $captured = $request->data();
+
+        return true;
+    });
+
+    expect($captured['payment_intent_data[metadata][reference]'])->toBe('order_99');
+});
+
 it('rejects a webhook with a bad signature', function (): void {
     $body = json_encode(['type' => 'checkout.session.completed', 'data' => ['object' => ['id' => 'cs_x']]]);
 

@@ -180,11 +180,11 @@ in your own application:
 use Syriable\Payments\Events\PaymentSucceeded;
 
 Event::listen(PaymentSucceeded::class, function (PaymentSucceeded $event) {
-    // $event->event is a normalized WebhookEvent.
-    // $event->event->paymentId is the *gateway's* id — the same value you
-    // stored as gateway_payment_id when the checkout was created.
-    Order::where('gateway', $event->event->gateway)
-        ->where('gateway_payment_id', $event->event->paymentId)
+    // $event->event is a normalized WebhookEvent. Reconcile on ->reference
+    // (your own checkout reference, echoed back by the gateway) rather than
+    // ->paymentId: the gateway id can point at different objects across
+    // events (a Stripe session id vs. a payment intent id).
+    Order::where('reference', $event->event->reference)
         ->first()
         ?->markPaid();
 });

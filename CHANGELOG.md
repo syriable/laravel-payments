@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Gateway::retrieve($paymentId)` on the gateway contract and both built-in
   drivers — pulls the authoritative payment state from the gateway so orders
   stuck in a non-final state can be reconciled when a webhook is missed.
+- `WebhookEvent::$reference` — your own checkout reference echoed back by the
+  gateway, for reliable reconciliation.
+
+### Fixed
+
+- Stripe webhooks now carry the checkout reference on `payment_intent.*`
+  events (not just `checkout.session.*`), so reconciling on the gateway's
+  payment id no longer misses depending on which event the dashboard sends.
+  Reconcile on `WebhookEvent::$reference`.
 
 ## [0.1.0](https://github.com/syriable/laravel-payments/releases/tag/v0.1.0) - 2026-05-20
 

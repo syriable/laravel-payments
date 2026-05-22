@@ -61,6 +61,9 @@ final class StripeGateway implements Gateway, Refundable
             'success_url' => $checkout->successUrl,
             'cancel_url' => $checkout->cancelUrl,
             'client_reference_id' => $checkout->reference,
+            // Propagate the reference onto the payment intent so it is present
+            // on payment_intent.* webhooks too, not just checkout.session.*.
+            'payment_intent_data[metadata][reference]' => $checkout->reference,
             'line_items[0][quantity]' => 1,
             'line_items[0][price_data][currency]' => strtolower($checkout->currency),
             'line_items[0][price_data][unit_amount]' => $checkout->amount,
@@ -189,6 +192,7 @@ final class StripeGateway implements Gateway, Refundable
             type: $this->normalizeEventType($stripeType),
             paymentId: $paymentId,
             payload: $event,
+            reference: $this->extractReference($object),
         );
     }
 
@@ -242,6 +246,20 @@ final class StripeGateway implements Gateway, Refundable
             $status === 'canceled', $status === 'expired' => PaymentStatus::Failed,
             default => PaymentStatus::Pending,
         };
+    }
+
+    /**
+     * Pull our checkout reference back out of the event object. Sessions
+     * carry it as client_reference_id; payment intents carry it in metadata.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function extractReference(array $object): ?string
+    {
+        $reference = $object['client_reference_id']
+            ?? (is_array($object['metadata'] ?? null) ? ($object['metadata']['reference'] ?? null) : null);
+
+        return is_string($reference) && $reference !== '' ? $reference : null;
     }
 
     private function normalizeEventType(string $stripeType): string

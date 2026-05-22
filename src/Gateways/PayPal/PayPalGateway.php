@@ -211,7 +211,34 @@ final class PayPalGateway implements Gateway, Refundable
             type: $this->normalizeEventType($paypalType),
             paymentId: $paymentId,
             payload: $event,
+            reference: $this->extractReference($resource),
         );
+    }
+
+    /**
+     * Pull our checkout reference back out of a webhook resource. Capture
+     * resources carry custom_id; order resources carry it on a purchase unit.
+     *
+     * @param  array<string, mixed>  $resource
+     */
+    private function extractReference(array $resource): ?string
+    {
+        $custom = $resource['custom_id'] ?? null;
+        if (is_string($custom) && $custom !== '') {
+            return $custom;
+        }
+
+        $units = $resource['purchase_units'] ?? null;
+        if (is_array($units) && is_array($units[0] ?? null)) {
+            foreach (['custom_id', 'reference_id'] as $key) {
+                $value = $units[0][$key] ?? null;
+                if (is_string($value) && $value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function mapOrderStatus(string $status): PaymentStatus
