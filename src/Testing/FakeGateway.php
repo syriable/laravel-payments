@@ -5,22 +5,22 @@ declare(strict_types=1);
 namespace Syriable\Payments\Testing;
 
 use Illuminate\Http\Request;
-use Syriable\Payments\Contracts\Capturable;
 use Syriable\Payments\Contracts\Gateway;
 use Syriable\Payments\Contracts\Refundable;
 use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 
 /**
  * In-memory fake gateway used by Gateway::fake().
  *
  * Records every call made to it, returns deterministic PaymentResult
- * objects, and implements every capability interface so consumer code
- * branching on `instanceof Refundable` still works in tests.
+ * objects, and implements the capability interfaces real gateways do so
+ * consumer code branching on `instanceof Refundable` still works in tests.
  */
-final class FakeGateway implements Capturable, Gateway, Refundable
+final class FakeGateway implements Gateway, Refundable
 {
     /** @var list<Checkout> */
     public array $checkouts = [];
@@ -28,8 +28,8 @@ final class FakeGateway implements Capturable, Gateway, Refundable
     /** @var list<array{paymentId: string, amount: int|null}> */
     public array $refunds = [];
 
-    /** @var list<array{paymentId: string, amount: int|null}> */
-    public array $captures = [];
+    /** @var list<string> */
+    public array $retrievals = [];
 
     public function __construct(private readonly string $name = 'fake') {}
 
@@ -50,6 +50,17 @@ final class FakeGateway implements Capturable, Gateway, Refundable
         );
     }
 
+    public function retrieve(string $paymentId): PaymentResult
+    {
+        $this->retrievals[] = $paymentId;
+
+        return new PaymentResult(
+            id: $paymentId,
+            status: PaymentStatus::Paid,
+            raw: ['fake' => true, 'payment_id' => $paymentId],
+        );
+    }
+
     public function refund(string $paymentId, ?int $amount = null): PaymentResult
     {
         $this->refunds[] = ['paymentId' => $paymentId, 'amount' => $amount];
@@ -61,17 +72,6 @@ final class FakeGateway implements Capturable, Gateway, Refundable
         );
     }
 
-    public function capture(string $paymentId, ?int $amount = null): PaymentResult
-    {
-        $this->captures[] = ['paymentId' => $paymentId, 'amount' => $amount];
-
-        return new PaymentResult(
-            id: 'fake_capture_'.count($this->captures),
-            status: PaymentStatus::Paid,
-            raw: ['fake' => true, 'payment_id' => $paymentId],
-        );
-    }
-
     public function webhook(Request $request): WebhookEvent
     {
         /** @var array<array-key, mixed> $payload */
@@ -79,7 +79,7 @@ final class FakeGateway implements Capturable, Gateway, Refundable
 
         return new WebhookEvent(
             gateway: $this->name,
-            type: 'payment.succeeded',
+            type: WebhookEventType::Succeeded,
             paymentId: 'fake_webhook_payment',
             payload: $payload,
         );

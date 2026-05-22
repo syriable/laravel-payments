@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Syriable\Payments\Exceptions;
 
 /**
- * Thrown when consumer code tries to use a capability (Refundable, Capturable)
+ * Thrown when consumer code tries to use a capability (e.g. Refundable)
  * that the resolved gateway doesn't implement.
  *
  * In practice the type-safe path is `instanceof Refundable` before calling
@@ -17,10 +17,5 @@ final class UnsupportedFeature extends PaymentException
     public static function notRefundable(string $gateway): self
     {
         return new self("Gateway [{$gateway}] does not support refunds.");
-    }
-
-    public static function notCapturable(string $gateway): self
-    {
-        return new self("Gateway [{$gateway}] does not support manual capture.");
     }
 }

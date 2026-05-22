@@ -15,9 +15,12 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
+use Syriable\Payments\Gateways\Concerns\ResilientHttp;
+use Syriable\Payments\Support\PaymentLog;
 
 /**
  * Stripe gateway driver.
@@ -31,6 +34,8 @@ use Syriable\Payments\Exceptions\PaymentFailed;
  */
 final class StripeGateway implements Gateway, Refundable
 {
+    use ResilientHttp;
+
     private const API_BASE = 'https://api.stripe.com/v1';
 
     private const NAME = 'stripe';
@@ -61,6 +66,9 @@ final class StripeGateway implements Gateway, Refundable
             'success_url' => $checkout->successUrl,
             'cancel_url' => $checkout->cancelUrl,
             'client_reference_id' => $checkout->reference,
+            // Propagate the reference onto the payment intent so it is present
+            // on payment_intent.* webhooks too, not just checkout.session.*.
+            'payment_intent_data[metadata][reference]' => $checkout->reference,
             'line_items[0][quantity]' => 1,
             'line_items[0][price_data][currency]' => strtolower($checkout->currency),
             'line_items[0][price_data][unit_amount]' => $checkout->amount,
@@ -76,6 +84,9 @@ final class StripeGateway implements Gateway, Refundable
         }
 
         $response = $this->client()
+            // Idempotency-Key makes a retried request reuse the same session
+            // instead of creating a duplicate.
+            ->withHeaders(['Idempotency-Key' => 'checkout_'.$checkout->reference])
             ->asForm()
             ->post(self::API_BASE.'/checkout/sessions', $payload);
 
@@ -94,11 +105,49 @@ final class StripeGateway implements Gateway, Refundable
 
         $url = $session['url'] ?? null;
 
+        PaymentLog::info('payments.checkout.created', [
+            'gateway' => self::NAME,
+            'reference' => $checkout->reference,
+            'payment_id' => (string) ($session['id'] ?? ''),
+            'amount' => $checkout->amount,
+            'currency' => $checkout->currency,
+        ]);
+
         return new PaymentResult(
             id: (string) ($session['id'] ?? ''),
             status: PaymentStatus::Pending,
             redirectUrl: is_string($url) ? $url : null,
             raw: $session,
+        );
+    }
+
+    public function retrieve(string $paymentId): PaymentResult
+    {
+        // Checkout sessions (cs_) and payment intents (pi_) live at different
+        // endpoints; pick the right one from the id prefix.
+        $endpoint = str_starts_with($paymentId, 'cs_')
+            ? self::API_BASE.'/checkout/sessions/'.$paymentId
+            : self::API_BASE.'/payment_intents/'.$paymentId;
+
+        $response = $this->client()->get($endpoint);
+
+        try {
+            $response->throw();
+        } catch (RequestException $exception) {
+            throw PaymentFailed::fromGateway(
+                self::NAME,
+                'Failed to retrieve payment: '.$exception->getMessage(),
+                (array) $response->json(),
+            );
+        }
+
+        /** @var array<string, mixed> $data */
+        $data = (array) $response->json();
+
+        return new PaymentResult(
+            id: (string) ($data['id'] ?? $paymentId),
+            status: $this->mapStatus($data),
+            raw: $data,
         );
     }
 
@@ -127,6 +176,13 @@ final class StripeGateway implements Gateway, Refundable
         /** @var array<string, mixed> $refund */
         $refund = (array) $response->json();
 
+        PaymentLog::info('payments.refund.issued', [
+            'gateway' => self::NAME,
+            'payment_id' => $paymentId,
+            'refund_id' => (string) ($refund['id'] ?? ''),
+            'amount' => $amount,
+        ]);
+
         return new PaymentResult(
             id: (string) ($refund['id'] ?? ''),
             status: PaymentStatus::Refunded,
@@ -147,7 +203,7 @@ final class StripeGateway implements Gateway, Refundable
 
         $this->verifySignature($payload, $signatureHeader, $secret);
 
-        /** @var array{type?: string, data?: array{object?: array<string, mixed>}} $event */
+        /** @var array{id?: string, type?: string, data?: array{object?: array<string, mixed>}} $event */
         $event = (array) json_decode($payload, true);
 
         $stripeType = (string) ($event['type'] ?? '');
@@ -159,6 +215,10 @@ final class StripeGateway implements Gateway, Refundable
             type: $this->normalizeEventType($stripeType),
             paymentId: $paymentId,
             payload: $event,
+            reference: $this->extractReference($object),
+            amount: $this->extractAmount($object),
+            currency: $this->extractCurrency($object),
+            eventId: is_string($event['id'] ?? null) ? $event['id'] : null,
         );
     }
 
@@ -197,13 +257,73 @@ final class StripeGateway implements Gateway, Refundable
         throw InvalidWebhookSignature::forGateway(self::NAME);
     }
 
-    private function normalizeEventType(string $stripeType): string
+    /**
+     * Map a Stripe session/payment-intent payload to a canonical status.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function mapStatus(array $data): PaymentStatus
+    {
+        $status = (string) ($data['status'] ?? '');
+        $paymentStatus = (string) ($data['payment_status'] ?? '');
+
+        return match (true) {
+            $status === 'succeeded', $status === 'complete', $paymentStatus === 'paid' => PaymentStatus::Paid,
+            $status === 'processing' => PaymentStatus::Processing,
+            str_starts_with($status, 'requires_') => PaymentStatus::RequiresAction,
+            $status === 'canceled', $status === 'expired' => PaymentStatus::Canceled,
+            default => PaymentStatus::Pending,
+        };
+    }
+
+    /**
+     * Pull our checkout reference back out of the event object. Sessions
+     * carry it as client_reference_id; payment intents carry it in metadata.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function extractReference(array $object): ?string
+    {
+        $reference = $object['client_reference_id']
+            ?? (is_array($object['metadata'] ?? null) ? ($object['metadata']['reference'] ?? null) : null);
+
+        return is_string($reference) && $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * Stripe amounts are already in minor units across session, intent, and
+     * charge objects — the key just differs by object type.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function extractAmount(array $object): ?int
+    {
+        foreach (['amount_total', 'amount', 'amount_refunded'] as $key) {
+            if (isset($object[$key]) && is_numeric($object[$key])) {
+                return (int) $object[$key];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     */
+    private function extractCurrency(array $object): ?string
+    {
+        $currency = $object['currency'] ?? null;
+
+        return is_string($currency) && $currency !== '' ? strtoupper($currency) : null;
+    }
+
+    private function normalizeEventType(string $stripeType): WebhookEventType
     {
         return match ($stripeType) {
-            'checkout.session.completed', 'payment_intent.succeeded' => 'payment.succeeded',
-            'payment_intent.payment_failed', 'checkout.session.expired' => 'payment.failed',
-            'charge.refunded' => 'payment.refunded',
-            default => 'payment.'.$stripeType,
+            'checkout.session.completed', 'payment_intent.succeeded' => WebhookEventType::Succeeded,
+            'payment_intent.payment_failed', 'checkout.session.expired' => WebhookEventType::Failed,
+            'charge.refunded' => WebhookEventType::Refunded,
+            default => WebhookEventType::Unknown,
         };
     }
 
@@ -214,10 +334,9 @@ final class StripeGateway implements Gateway, Refundable
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
-        return $factory
-            ->withToken($secret)
-            ->acceptJson()
-            ->timeout(30);
+        return $this->applyResilience(
+            $factory->withToken($secret)->acceptJson()
+        );
     }
 
     private function requiredConfig(string $key): string

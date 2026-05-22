@@ -6,12 +6,13 @@ namespace Syriable\Payments\Http;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Syriable\Payments\Events\PaymentFailed;
-use Syriable\Payments\Events\PaymentRefunded;
-use Syriable\Payments\Events\PaymentSucceeded;
+use Illuminate\Support\Facades\Cache;
+use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\GatewayManager;
+use Syriable\Payments\Jobs\ProcessWebhookEvent;
+use Syriable\Payments\Support\PaymentLog;
 
 /**
  * The package's single webhook entrypoint.
@@ -41,16 +42,53 @@ final class WebhookController
         try {
             $event = $driver->webhook($request);
         } catch (InvalidWebhookSignature) {
+            PaymentLog::warning('payments.webhook.invalid_signature', ['gateway' => $gateway]);
+
             return new Response('Invalid signature', 403);
         }
 
-        match (true) {
-            str_ends_with($event->type, '.succeeded') => PaymentSucceeded::dispatch($event),
-            str_ends_with($event->type, '.failed') => PaymentFailed::dispatch($event),
-            str_ends_with($event->type, '.refunded') => PaymentRefunded::dispatch($event),
-            default => null,
-        };
+        // Gateways legitimately redeliver; drop duplicates before dispatching.
+        if ($this->alreadyProcessed($event)) {
+            PaymentLog::info('payments.webhook.duplicate', [
+                'gateway' => $event->gateway,
+                'event_id' => $event->eventId,
+            ]);
+
+            return new Response('OK', 200);
+        }
+
+        PaymentLog::info('payments.webhook.received', [
+            'gateway' => $event->gateway,
+            'type' => $event->type->value,
+            'event_id' => $event->eventId,
+            'payment_id' => $event->paymentId,
+            'reference' => $event->reference,
+        ]);
+
+        // Acknowledge fast; do the business processing off the request cycle.
+        $connection = config('payment-gateways.webhook.connection');
+        $queue = config('payment-gateways.webhook.queue');
+
+        ProcessWebhookEvent::dispatch($event)
+            ->onConnection(is_string($connection) ? $connection : null)
+            ->onQueue(is_string($queue) ? $queue : null);
 
         return new Response('OK', 200);
+    }
+
+    /**
+     * Returns true the second (and later) time the same event id is seen.
+     * Cache::add is atomic, so concurrent redeliveries can't both win.
+     */
+    private function alreadyProcessed(WebhookEvent $event): bool
+    {
+        if ($event->eventId === null || $event->eventId === '') {
+            return false;
+        }
+
+        $ttl = (int) config('payment-gateways.webhook.idempotency_ttl', 86400);
+        $key = "payment-gateways:webhook:{$event->gateway}:{$event->eventId}";
+
+        return ! Cache::add($key, true, $ttl);
     }
 }

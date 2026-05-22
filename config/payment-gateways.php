@@ -19,6 +19,40 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Logging
+    |--------------------------------------------------------------------------
+    |
+    | Channel used for payment activity logs (checkout, refund, webhook). Set
+    | to null to use the application's default log channel.
+    |
+    */
+
+    'logging' => [
+        'channel' => env('PAYMENT_LOG_CHANNEL'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Outbound HTTP
+    |--------------------------------------------------------------------------
+    |
+    | Timeout (seconds) and transient-error retry policy for gateway API
+    | calls. Retries fire on connection errors and 429/5xx responses with
+    | exponential backoff; writes are safe to retry because checkouts carry
+    | idempotency keys. "times" is the total number of attempts.
+    |
+    */
+
+    'http' => [
+        'timeout' => 30,
+        'retry' => [
+            'times' => 3,
+            'sleep_ms' => 200,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Webhook Route
     |--------------------------------------------------------------------------
     |
@@ -37,6 +71,15 @@ return [
         'enabled' => true,
         'prefix' => env('PAYMENT_WEBHOOK_PREFIX', 'payment-gateways'),
         'middleware' => ['api'],
+
+        // How long (seconds) a processed webhook id is remembered so
+        // redelivered duplicates are dropped before dispatching.
+        'idempotency_ttl' => 86400,
+
+        // Queue connection/name for off-request webhook processing. Leave
+        // null to use the application defaults; the request always acks fast.
+        'connection' => env('PAYMENT_WEBHOOK_QUEUE_CONNECTION'),
+        'queue' => env('PAYMENT_WEBHOOK_QUEUE'),
     ],
 
     /*

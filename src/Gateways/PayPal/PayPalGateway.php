@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Syriable\Payments\Contracts\Gateway;
 use Syriable\Payments\Contracts\Refundable;
@@ -15,9 +16,12 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
+use Syriable\Payments\Gateways\Concerns\ResilientHttp;
+use Syriable\Payments\Support\PaymentLog;
 
 /**
  * PayPal gateway driver (Orders v2 API).
@@ -31,6 +35,8 @@ use Syriable\Payments\Exceptions\PaymentFailed;
  */
 final class PayPalGateway implements Gateway, Refundable
 {
+    use ResilientHttp;
+
     private const NAME = 'paypal';
 
     private const LIVE_BASE = 'https://api-m.paypal.com';
@@ -79,6 +85,9 @@ final class PayPalGateway implements Gateway, Refundable
         }
 
         $response = $this->authedClient()
+            // PayPal-Request-Id makes a retried create reuse the same order
+            // instead of creating a duplicate.
+            ->withHeaders(['PayPal-Request-Id' => 'checkout_'.$checkout->reference])
             ->post($this->baseUrl().'/v2/checkout/orders', $payload);
 
         try {
@@ -97,10 +106,44 @@ final class PayPalGateway implements Gateway, Refundable
         /** @var list<array<string, mixed>> $links */
         $links = is_array($order['links'] ?? null) ? $order['links'] : [];
 
+        PaymentLog::info('payments.checkout.created', [
+            'gateway' => self::NAME,
+            'reference' => $checkout->reference,
+            'payment_id' => (string) ($order['id'] ?? ''),
+            'amount' => $checkout->amount,
+            'currency' => $checkout->currency,
+        ]);
+
         return new PaymentResult(
             id: (string) ($order['id'] ?? ''),
             status: PaymentStatus::Pending,
             redirectUrl: $this->approveLink($links),
+            raw: $order,
+        );
+    }
+
+    public function retrieve(string $paymentId): PaymentResult
+    {
+        // $paymentId is the order id returned at checkout.
+        $response = $this->authedClient()
+            ->get($this->baseUrl().'/v2/checkout/orders/'.$paymentId);
+
+        try {
+            $response->throw();
+        } catch (RequestException $exception) {
+            throw PaymentFailed::fromGateway(
+                self::NAME,
+                'Failed to retrieve order: '.$exception->getMessage(),
+                (array) $response->json(),
+            );
+        }
+
+        /** @var array<string, mixed> $order */
+        $order = (array) $response->json();
+
+        return new PaymentResult(
+            id: (string) ($order['id'] ?? $paymentId),
+            status: $this->mapOrderStatus((string) ($order['status'] ?? '')),
             raw: $order,
         );
     }
@@ -139,6 +182,13 @@ final class PayPalGateway implements Gateway, Refundable
         /** @var array<string, mixed> $refund */
         $refund = (array) $response->json();
 
+        PaymentLog::info('payments.refund.issued', [
+            'gateway' => self::NAME,
+            'payment_id' => $paymentId,
+            'refund_id' => (string) ($refund['id'] ?? ''),
+            'amount' => $amount,
+        ]);
+
         return new PaymentResult(
             id: (string) ($refund['id'] ?? ''),
             status: PaymentStatus::Refunded,
@@ -173,7 +223,7 @@ final class PayPalGateway implements Gateway, Refundable
             throw InvalidWebhookSignature::forGateway(self::NAME);
         }
 
-        /** @var array{event_type?: string, resource?: array<string, mixed>} $event */
+        /** @var array{id?: string, event_type?: string, resource?: array<string, mixed>} $event */
         $event = $request->json()->all();
 
         $paypalType = (string) ($event['event_type'] ?? '');
@@ -185,18 +235,91 @@ final class PayPalGateway implements Gateway, Refundable
             type: $this->normalizeEventType($paypalType),
             paymentId: $paymentId,
             payload: $event,
+            reference: $this->extractReference($resource),
+            amount: $this->extractAmount($resource),
+            currency: $this->extractCurrency($resource),
+            eventId: is_string($event['id'] ?? null) ? $event['id'] : null,
         );
     }
 
-    private function normalizeEventType(string $paypalType): string
+    /**
+     * Pull our checkout reference back out of a webhook resource. Capture
+     * resources carry custom_id; order resources carry it on a purchase unit.
+     *
+     * @param  array<string, mixed>  $resource
+     */
+    private function extractReference(array $resource): ?string
+    {
+        $custom = $resource['custom_id'] ?? null;
+        if (is_string($custom) && $custom !== '') {
+            return $custom;
+        }
+
+        $units = $resource['purchase_units'] ?? null;
+        if (is_array($units) && is_array($units[0] ?? null)) {
+            foreach (['custom_id', 'reference_id'] as $key) {
+                $value = $units[0][$key] ?? null;
+                if (is_string($value) && $value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * PayPal reports amounts as major-unit decimal strings; normalize back to
+     * the integer minor units this package uses everywhere else.
+     *
+     * @param  array<string, mixed>  $resource
+     */
+    private function extractAmount(array $resource): ?int
+    {
+        $amount = $resource['amount'] ?? null;
+        if (! is_array($amount)) {
+            return null;
+        }
+
+        $value = $amount['value'] ?? null;
+        $currency = $amount['currency_code'] ?? null;
+        if (! is_string($value) || ! is_numeric($value) || ! is_string($currency)) {
+            return null;
+        }
+
+        return $this->toMinorUnits($value, $currency);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resource
+     */
+    private function extractCurrency(array $resource): ?string
+    {
+        $amount = $resource['amount'] ?? null;
+        $currency = is_array($amount) ? ($amount['currency_code'] ?? null) : null;
+
+        return is_string($currency) && $currency !== '' ? strtoupper($currency) : null;
+    }
+
+    private function mapOrderStatus(string $status): PaymentStatus
+    {
+        return match ($status) {
+            'COMPLETED' => PaymentStatus::Paid,
+            'VOIDED' => PaymentStatus::Canceled,
+            'PAYER_ACTION_REQUIRED' => PaymentStatus::RequiresAction,
+            default => PaymentStatus::Pending,
+        };
+    }
+
+    private function normalizeEventType(string $paypalType): WebhookEventType
     {
         return match ($paypalType) {
             'CHECKOUT.ORDER.APPROVED',
-            'PAYMENT.CAPTURE.COMPLETED' => 'payment.succeeded',
+            'PAYMENT.CAPTURE.COMPLETED' => WebhookEventType::Succeeded,
             'PAYMENT.CAPTURE.DENIED',
-            'PAYMENT.CAPTURE.DECLINED' => 'payment.failed',
-            'PAYMENT.CAPTURE.REFUNDED' => 'payment.refunded',
-            default => 'payment.'.strtolower(str_replace('.', '_', $paypalType)),
+            'PAYMENT.CAPTURE.DECLINED' => WebhookEventType::Failed,
+            'PAYMENT.CAPTURE.REFUNDED' => WebhookEventType::Refunded,
+            default => WebhookEventType::Unknown,
         };
     }
 
@@ -226,11 +349,9 @@ final class PayPalGateway implements Gateway, Refundable
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
-        return $factory
-            ->withToken($this->accessToken())
-            ->acceptJson()
-            ->asJson()
-            ->timeout(30);
+        return $this->applyResilience(
+            $factory->withToken($this->accessToken())->acceptJson()->asJson()
+        );
     }
 
     private function accessToken(): string
@@ -242,15 +363,34 @@ final class PayPalGateway implements Gateway, Refundable
         $clientId = $this->requiredConfig('client_id');
         $clientSecret = $this->requiredConfig('client_secret');
 
+        // Reuse the token across requests until just before it expires, instead
+        // of paying for a fresh OAuth round-trip on every call.
+        $cacheKey = 'payment-gateways:paypal:token:'.md5($this->baseUrl().'|'.$clientId);
+
+        $cached = Cache::get($cacheKey);
+        if (is_string($cached) && $cached !== '') {
+            return $this->accessToken = $cached;
+        }
+
+        [$token, $expiresIn] = $this->requestAccessToken($clientId, $clientSecret);
+
+        // Refresh a minute early so we never use a token mid-expiry.
+        Cache::put($cacheKey, $token, max(60, $expiresIn - 60));
+
+        return $this->accessToken = $token;
+    }
+
+    /**
+     * @return array{0: string, 1: int} token and its lifetime in seconds
+     */
+    private function requestAccessToken(string $clientId, string $clientSecret): array
+    {
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
-        $response = $factory
-            ->withBasicAuth($clientId, $clientSecret)
-            ->asForm()
-            ->acceptJson()
-            ->timeout(30)
-            ->post($this->baseUrl().'/v1/oauth2/token', ['grant_type' => 'client_credentials']);
+        $response = $this->applyResilience(
+            $factory->withBasicAuth($clientId, $clientSecret)->asForm()->acceptJson()
+        )->post($this->baseUrl().'/v1/oauth2/token', ['grant_type' => 'client_credentials']);
 
         try {
             $response->throw();
@@ -269,7 +409,12 @@ final class PayPalGateway implements Gateway, Refundable
             throw PaymentFailed::fromGateway(self::NAME, 'OAuth response missing access_token.', $body);
         }
 
-        return $this->accessToken = $body['access_token'];
+        // PayPal tokens last ~9h; fall back to that if the field is absent.
+        $expiresIn = isset($body['expires_in']) && is_numeric($body['expires_in'])
+            ? (int) $body['expires_in']
+            : 32400;
+
+        return [$body['access_token'], $expiresIn];
     }
 
     private function baseUrl(): string
@@ -308,6 +453,23 @@ final class PayPalGateway implements Gateway, Refundable
         $fraction = abs($amount % $divisor);
 
         return sprintf("%d.%0{$exponent}d", $whole, $fraction);
+    }
+
+    /**
+     * Convert a major-unit decimal string back to integer minor units
+     * (e.g. "25.99" -> 2599). Integer math only; no floats touch the amount.
+     */
+    private function toMinorUnits(string $value, string $currency): int
+    {
+        $exponent = $this->currencyExponent($currency);
+
+        $parts = explode('.', $value, 2);
+        $whole = (int) $parts[0];
+        $fraction = $exponent === 0
+            ? 0
+            : (int) str_pad(substr($parts[1] ?? '', 0, $exponent), $exponent, '0');
+
+        return $whole * (10 ** $exponent) + $fraction;
     }
 
     /**

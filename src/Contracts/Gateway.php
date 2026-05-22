@@ -17,9 +17,9 @@ use Syriable\Payments\Data\WebhookEvent;
  *  - parse and verify an incoming webhook
  *  - report its own canonical name (used by the manager + events)
  *
- * Refunds, captures, and other optional capabilities are expressed as
- * separate interfaces (see Refundable, Capturable) so that gateways
- * advertise capabilities through the type system, not through booleans.
+ * Optional capabilities (e.g. refunds) are expressed as separate
+ * interfaces (see Refundable) so that gateways advertise capabilities
+ * through the type system, not through booleans.
  */
 interface Gateway
 {
@@ -36,6 +36,14 @@ interface Gateway
      * present) should be returned to the user as a redirect response.
      */
     public function checkout(Checkout $checkout): PaymentResult;
+
+    /**
+     * Fetch the current state of a payment straight from the gateway.
+     *
+     * Webhooks are best-effort and can be lost; this is the authoritative
+     * pull used to reconcile orders stuck in a non-final state.
+     */
+    public function retrieve(string $paymentId): PaymentResult;
 
     /**
      * Verify and parse an incoming webhook request.

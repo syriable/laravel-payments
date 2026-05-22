@@ -110,7 +110,7 @@ return redirect($result->redirectUrl);
 
 ```php
 $result->id;            // gateway's payment/session id
-$result->status;        // PaymentStatus enum: Pending | Paid | Failed | Refunded
+$result->status;        // PaymentStatus enum (Pending, RequiresAction, Processing, Paid, Failed, Canceled, PartiallyRefunded, Refunded)
 $result->redirectUrl;   // hosted-checkout URL, if any
 $result->raw;           // full untouched gateway response
 ```
@@ -131,6 +131,23 @@ $result->raw;           // full untouched gateway response
 >     'gateway_payment_id' => $result->id,
 > ]);
 > ```
+
+### Reconciliation
+
+Webhooks can be lost (downtime, deploys, secret rotation). `retrieve()` pulls
+the authoritative state straight from the gateway, so you can reconcile orders
+stuck in a non-final state:
+
+```php
+$result = Gateway::driver('stripe')->retrieve($order->gateway_payment_id);
+
+if ($result->status === PaymentStatus::Paid) {
+    $order->markPaid();
+}
+```
+
+Run it from a scheduled command over your own `Pending` orders — the package
+stores nothing, so the schedule and the query are yours.
 
 ### Refunds
 
@@ -163,19 +180,29 @@ in your own application:
 use Syriable\Payments\Events\PaymentSucceeded;
 
 Event::listen(PaymentSucceeded::class, function (PaymentSucceeded $event) {
-    // $event->event is a normalized WebhookEvent.
-    // $event->event->paymentId is the *gateway's* id — the same value you
-    // stored as gateway_payment_id when the checkout was created.
-    Order::where('gateway', $event->event->gateway)
-        ->where('gateway_payment_id', $event->event->paymentId)
-        ->first()
-        ?->markPaid();
+    // $event->event is a normalized WebhookEvent. Reconcile on ->reference
+    // (your own checkout reference, echoed back by the gateway) rather than
+    // ->paymentId: the gateway id can point at different objects across
+    // events (a Stripe session id vs. a payment intent id).
+    $order = Order::where('reference', $event->event->reference)->first();
+
+    // Always verify the amount before fulfilling.
+    if ($order && $event->event->amount === $order->total_minor
+        && $event->event->currency === $order->currency) {
+        $order->markPaid();
+    }
 });
 ```
 
 Events: `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`. Each carries a
-normalized `WebhookEvent` with `$gateway`, `$type`, `$paymentId`, and the full
-verified `$payload`.
+normalized `WebhookEvent` with `$gateway`, `$type`, `$paymentId`, `$reference`,
+`$amount`, `$currency`, `$eventId`, and the full verified `$payload`.
+
+The controller verifies the signature, drops duplicates, and acknowledges
+immediately; the events are dispatched from a queued `ProcessWebhookEvent` job
+so a slow listener can't make the gateway time out and retry. Point it at a
+real queue with `webhook.connection` / `webhook.queue` (defaults to the
+application's queue).
 
 Invalid signatures return `403` and dispatch nothing. Unknown gateways return
 `404`.
@@ -188,6 +215,19 @@ Invalid signatures return `403` and dispatch nothing. Unknown gateways return
 > CSRF protection, which rejects server-to-server webhook requests. The
 > default config uses `api`; change `webhook.middleware` only to something
 > equally CSRF-free.
+
+## Observability
+
+The package logs the money-movement boundaries — `payments.checkout.created`,
+`payments.refund.issued`, `payments.webhook.received`, `payments.webhook.duplicate`,
+and `payments.webhook.invalid_signature` — with ids, references, and amounts
+(never secrets or full payloads). Route them to their own channel:
+
+```env
+PAYMENT_LOG_CHANNEL=payments
+```
+
+Leave it unset to use the application's default channel.
 
 ## Adding a custom gateway
 
@@ -220,7 +260,7 @@ class PaymobServiceProvider extends ServiceProvider
 }
 ```
 
-Your gateway class implements the `Gateway` contract — and, optionally, `Refundable` and/or `Capturable`:
+Your gateway class implements the `Gateway` contract — and, optionally, `Refundable`:
 
 ```php
 use Syriable\Payments\Contracts\Gateway;
@@ -230,6 +270,7 @@ final class PaymobGateway implements Gateway, Refundable
 {
     public function name(): string { /* ... */ }
     public function checkout(Checkout $checkout): PaymentResult { /* ... */ }
+    public function retrieve(string $paymentId): PaymentResult { /* ... */ }
     public function webhook(Request $request): WebhookEvent { /* ... */ }
     public function refund(string $paymentId, ?int $amount = null): PaymentResult { /* ... */ }
 }
@@ -288,7 +329,7 @@ return [
 
 ```
 src/
-├── Contracts/      Gateway, Refundable, Capturable
+├── Contracts/      Gateway, Refundable
 ├── Data/           Checkout, PaymentResult, WebhookEvent  (readonly DTOs)
 ├── Enums/          PaymentStatus
 ├── Events/         PaymentSucceeded, PaymentFailed, PaymentRefunded

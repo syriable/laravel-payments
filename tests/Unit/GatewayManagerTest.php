@@ -3,13 +3,13 @@
 declare(strict_types=1);
 
 use Illuminate\Http\Request;
-use Syriable\Payments\Contracts\Capturable;
 use Syriable\Payments\Contracts\Gateway;
 use Syriable\Payments\Contracts\Refundable;
 use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Facades\Gateway as GatewayFacade;
 use Syriable\Payments\GatewayManager;
@@ -64,9 +64,14 @@ it('registers a custom gateway through extend()', function (): void {
             );
         }
 
+        public function retrieve(string $paymentId): PaymentResult
+        {
+            return new PaymentResult($paymentId, PaymentStatus::Paid);
+        }
+
         public function webhook(Request $request): WebhookEvent
         {
-            return new WebhookEvent('paymob', 'payment.succeeded', 'paymob_1');
+            return new WebhookEvent('paymob', WebhookEventType::Succeeded, 'paymob_1');
         }
     };
 
@@ -93,15 +98,19 @@ it('does not claim capabilities a gateway lacks', function (): void {
             return new PaymentResult('cash_1', PaymentStatus::Pending);
         }
 
+        public function retrieve(string $paymentId): PaymentResult
+        {
+            return new PaymentResult($paymentId, PaymentStatus::Paid);
+        }
+
         public function webhook(Request $request): WebhookEvent
         {
-            return new WebhookEvent('cash', 'payment.succeeded', 'cash_1');
+            return new WebhookEvent('cash', WebhookEventType::Succeeded, 'cash_1');
         }
     };
 
     GatewayFacade::extend('cash', fn (): Gateway => $minimal);
 
     expect(GatewayFacade::gateway('cash'))
-        ->not->toBeInstanceOf(Refundable::class)
-        ->not->toBeInstanceOf(Capturable::class);
+        ->not->toBeInstanceOf(Refundable::class);
 });

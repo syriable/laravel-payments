@@ -9,6 +9,7 @@ use Syriable\Payments\Data\Checkout;
 use Syriable\Payments\Data\PaymentResult;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\PaymentStatus;
+use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Events\PaymentFailed;
 use Syriable\Payments\Events\PaymentRefunded;
 use Syriable\Payments\Events\PaymentSucceeded;
@@ -44,6 +45,25 @@ it('dispatches PaymentSucceeded for a valid stripe webhook', function (): void {
         static fn (PaymentSucceeded $e): bool => $e->event->paymentId === 'cs_test_777'
             && $e->event->gateway === 'stripe',
     );
+});
+
+it('dispatches a redelivered webhook only once', function (): void {
+    Event::fake([PaymentSucceeded::class]);
+
+    $secret = 'whsec_test_dummy';
+    $body = json_encode([
+        'id' => 'evt_dup_1',
+        'type' => 'checkout.session.completed',
+        'data' => ['object' => ['id' => 'cs_test_777']],
+    ]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+    $server = ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}", 'CONTENT_TYPE' => 'application/json'];
+
+    $this->call('POST', '/payment-gateways/webhook/stripe', server: $server, content: $body)->assertOk();
+    $this->call('POST', '/payment-gateways/webhook/stripe', server: $server, content: $body)->assertOk();
+
+    Event::assertDispatchedTimes(PaymentSucceeded::class, 1);
 });
 
 it('returns 403 for a webhook with an invalid signature', function (): void {
@@ -89,9 +109,14 @@ it('dispatches PaymentRefunded for a refund webhook from a custom gateway', func
             return new PaymentResult('d1', PaymentStatus::Pending);
         }
 
+        public function retrieve(string $paymentId): PaymentResult
+        {
+            return new PaymentResult($paymentId, PaymentStatus::Paid);
+        }
+
         public function webhook(Request $request): WebhookEvent
         {
-            return new WebhookEvent('demo', 'payment.refunded', 'd1');
+            return new WebhookEvent('demo', WebhookEventType::Refunded, 'd1');
         }
     });
 
