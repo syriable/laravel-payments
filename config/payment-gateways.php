@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Syriable\Payments\Store\NullWebhookStore;
 
 return [
 
@@ -75,6 +76,11 @@ return [
         // How long (seconds) a processed webhook id is remembered so
         // redelivered duplicates are dropped before dispatching.
         'idempotency_ttl' => 86400,
+
+        // Where verified webhook payloads are persisted before async
+        // processing. Set to Store\NullWebhookStore::class to disable
+        // persistence, or bind your own Contracts\WebhookStore.
+        'store' => NullWebhookStore::class,
 
         // Queue connection/name for off-request webhook processing. Leave
         // null to use the application defaults; the request always acks fast.
