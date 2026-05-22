@@ -5,16 +5,31 @@ All notable changes to `syriable/laravel-payments` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/syriable/laravel-payments/compare/v0.1.1...HEAD)
+## [Unreleased](https://github.com/syriable/laravel-payments/compare/v1.0.0...HEAD)
 
-## [0.1.1](https://github.com/syriable/laravel-payments/compare/v0.1.0...v0.1.1) - 2026-05-22
+## [1.0.0](https://github.com/syriable/laravel-payments/compare/v0.1.0...v1.0.0) - 2026-05-22
 
-A production-hardening release: reconciliation, payment-consistency, and
-webhook-integrity fixes. Some public types changed (`WebhookEvent`,
-`PaymentStatus`); see Changed/Removed below before upgrading.
+The first stable release — "trustworthy money": reconciliation, durable
+webhook delivery, payment-consistency and webhook-integrity controls, and
+typed events end to end. This consolidates the previously unreleased 0.1.1
+work and is a breaking change from 0.1.0; see **Upgrading** below.
 
 ### Added
 
+- Durable, swappable webhook persistence. Verified webhooks are now persisted
+  through a `Contracts\WebhookStore` before async processing. The default
+  `Store\DatabaseWebhookStore` records each delivery to a `payment_webhook_calls`
+  table (publishable migration) with a `pending` → `processed`/`failed`
+  lifecycle and is idempotent on the gateway event id. Swap in your own store
+  via the `webhook.store` config key, or `Store\NullWebhookStore` to disable.
+- `payment:reconcile {gateway} {payment}` artisan command and a
+  `Jobs\ReconcilePayment` job — pull the authoritative state via `retrieve()`
+  and re-emit the canonical payment event so existing webhook listeners run.
+  Queued by default; `--sync` runs inline.
+- `PaymentResult::$reference`, `$amount` (minor units), and `$currency`,
+  populated by `retrieve()` on both drivers, so a reconciled payment can be
+  verified with the same controls as a webhook.
+- `Enums\WebhookCallStatus` (`Pending`, `Processed`, `Failed`).
 - `Gateway::retrieve($paymentId)` on the gateway contract and both built-in
   drivers — pulls the authoritative payment state from the gateway so orders
   stuck in a non-final state can be reconciled when a webhook is missed.
@@ -69,6 +84,33 @@ webhook-integrity fixes. Some public types changed (`WebhookEvent`,
   events (not just `checkout.session.*`), so reconciling on the gateway's
   payment id no longer misses depending on which event the dashboard sends.
   Reconcile on `WebhookEvent::$reference`.
+
+### Upgrading from 0.1.0
+
+1. **Run the migration.** Webhook persistence is on by default. Publish and
+   migrate:
+
+   ```bash
+   php artisan vendor:publish --tag="laravel-payments-migrations"
+   php artisan migrate
+   ```
+
+   To keep the previous stateless behavior instead, set `webhook.store` to
+   `Syriable\Payments\Store\NullWebhookStore::class`.
+
+2. **`WebhookEvent::$type` is a `WebhookEventType` enum**, not a string.
+   Compare against the enum; the raw gateway event name is still in `$payload`.
+
+3. **`Gateway::retrieve()` is now required** by the `Gateway` contract. Custom
+   gateways must implement it (return a `PaymentResult`).
+
+4. **The `Capturable` contract was removed.** It was implemented only by the
+   test fake. Use `UnsupportedFeature` for genuinely unsupported operations.
+
+5. **`PaymentResult` gained `reference`/`amount`/`currency`** before `raw`.
+   This is source-compatible if you construct it with named arguments (as the
+   built-in drivers do); positional callers that passed `raw` should switch to
+   named arguments.
 
 ## [0.1.0](https://github.com/syriable/laravel-payments/releases/tag/v0.1.0) - 2026-05-20
 
