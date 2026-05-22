@@ -5,9 +5,17 @@ declare(strict_types=1);
 use Syriable\Payments\Contracts\WebhookStore;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\WebhookEventType;
+use Syriable\Payments\Store\DatabaseWebhookStore;
 use Syriable\Payments\Store\NullWebhookStore;
 
-it('resolves the configured webhook store from the container', function (): void {
+it('resolves the database store by default', function (): void {
+    expect(app(WebhookStore::class))->toBeInstanceOf(DatabaseWebhookStore::class);
+});
+
+it('resolves the store configured under webhook.store', function (): void {
+    config()->set('payment-gateways.webhook.store', NullWebhookStore::class);
+    app()->forgetInstance(WebhookStore::class);
+
     expect(app(WebhookStore::class))->toBeInstanceOf(NullWebhookStore::class);
 });
 

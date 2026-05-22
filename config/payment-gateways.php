@@ -1,7 +1,8 @@
 <?php
 
 declare(strict_types=1);
-use Syriable\Payments\Store\NullWebhookStore;
+
+use Syriable\Payments\Store\DatabaseWebhookStore;
 
 return [
 
@@ -80,7 +81,7 @@ return [
         // Where verified webhook payloads are persisted before async
         // processing. Set to Store\NullWebhookStore::class to disable
         // persistence, or bind your own Contracts\WebhookStore.
-        'store' => NullWebhookStore::class,
+        'store' => DatabaseWebhookStore::class,
 
         // Queue connection/name for off-request webhook processing. Leave
         // null to use the application defaults; the request always acks fast.
