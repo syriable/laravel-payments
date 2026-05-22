@@ -6,6 +6,7 @@ namespace Syriable\Payments;
 
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Syriable\Payments\Console\ReconcilePaymentCommand;
 use Syriable\Payments\Contracts\WebhookStore;
 use Syriable\Payments\Store\NullWebhookStore;
 
@@ -28,6 +29,7 @@ class PaymentsServiceProvider extends PackageServiceProvider
             ->name('laravel-payments')
             ->hasConfigFile('payment-gateways')
             ->hasMigration('create_payment_webhook_calls_table')
+            ->hasCommand(ReconcilePaymentCommand::class)
             ->hasRoute('webhooks');
     }
 
