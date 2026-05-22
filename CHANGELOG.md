@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stuck in a non-final state can be reconciled when a webhook is missed.
 - `WebhookEvent::$reference` — your own checkout reference echoed back by the
   gateway, for reliable reconciliation.
+- `WebhookEvent::$amount` (minor units) and `WebhookEvent::$currency` — the
+  gateway-reported figures for the event, so listeners can verify the amount
+  paid matches the order before fulfilling. PayPal's major-unit decimals are
+  normalized back to integer minor units.
 
 ### Fixed
 

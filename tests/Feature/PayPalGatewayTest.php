@@ -149,6 +149,43 @@ it('verifies a webhook by calling paypal verification endpoint', function (): vo
         ->and($event->paymentId)->toBe('CAPTURE-9');
 });
 
+it('normalizes the webhook amount back to minor units', function (int|string $value, string $currency, int $expected): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api-m.sandbox.paypal.com/v1/oauth2/token' => $http->response(['access_token' => 't'], 200),
+        'api-m.sandbox.paypal.com/v1/notifications/verify-webhook-signature' => $http->response([
+            'verification_status' => 'SUCCESS',
+        ], 200),
+    ]);
+
+    $request = Request::create(
+        '/payment-gateways/webhook/paypal',
+        'POST',
+        server: [
+            'HTTP_PAYPAL_AUTH_ALGO' => 'SHA256withRSA',
+            'HTTP_PAYPAL_CERT_URL' => 'https://api.sandbox.paypal.com/cert',
+            'HTTP_PAYPAL_TRANSMISSION_ID' => 'tx-1',
+            'HTTP_PAYPAL_TRANSMISSION_SIG' => 'sig-1',
+            'HTTP_PAYPAL_TRANSMISSION_TIME' => '2026-05-20T00:00:00Z',
+            'CONTENT_TYPE' => 'application/json',
+        ],
+        content: json_encode([
+            'event_type' => 'PAYMENT.CAPTURE.COMPLETED',
+            'resource' => ['id' => 'C-1', 'amount' => ['currency_code' => $currency, 'value' => (string) $value]],
+        ]),
+    );
+
+    $event = (new PayPalGateway(paypalConfig(), $http))->webhook($request);
+
+    expect($event->amount)->toBe($expected)
+        ->and($event->currency)->toBe($currency);
+})->with([
+    'usd' => ['25.00', 'USD', 2500],
+    'usd fraction' => ['25.99', 'USD', 2599],
+    'jpy zero-decimal' => ['4000', 'JPY', 4000],
+    'kwd three-decimal' => ['12.345', 'KWD', 12345],
+]);
+
 it('exposes our checkout reference from a capture webhook custom_id', function (): void {
     $http = new HttpFactory;
     $http->fake([

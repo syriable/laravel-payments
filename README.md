@@ -184,9 +184,13 @@ Event::listen(PaymentSucceeded::class, function (PaymentSucceeded $event) {
     // (your own checkout reference, echoed back by the gateway) rather than
     // ->paymentId: the gateway id can point at different objects across
     // events (a Stripe session id vs. a payment intent id).
-    Order::where('reference', $event->event->reference)
-        ->first()
-        ?->markPaid();
+    $order = Order::where('reference', $event->event->reference)->first();
+
+    // Always verify the amount before fulfilling.
+    if ($order && $event->event->amount === $order->total_minor
+        && $event->event->currency === $order->currency) {
+        $order->markPaid();
+    }
 });
 ```
 

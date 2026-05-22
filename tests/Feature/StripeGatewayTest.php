@@ -186,6 +186,28 @@ it('propagates the reference onto the payment intent at checkout', function (): 
     expect($captured['payment_intent_data[metadata][reference]'])->toBe('order_99');
 });
 
+it('exposes the paid amount and currency from a session webhook', function (): void {
+    $secret = 'whsec_test_x';
+    $body = json_encode([
+        'type' => 'checkout.session.completed',
+        'data' => ['object' => ['id' => 'cs_1', 'amount_total' => 2500, 'currency' => 'usd']],
+    ]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+    $request = Request::create(
+        '/payment-gateways/webhook/stripe',
+        'POST',
+        server: ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}"],
+        content: $body,
+    );
+
+    $event = stripeGateway(new HttpFactory)->webhook($request);
+
+    expect($event->amount)->toBe(2500)
+        ->and($event->currency)->toBe('USD');
+});
+
 it('rejects a webhook with a bad signature', function (): void {
     $body = json_encode(['type' => 'checkout.session.completed', 'data' => ['object' => ['id' => 'cs_x']]]);
 

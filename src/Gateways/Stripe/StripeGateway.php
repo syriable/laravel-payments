@@ -193,6 +193,8 @@ final class StripeGateway implements Gateway, Refundable
             paymentId: $paymentId,
             payload: $event,
             reference: $this->extractReference($object),
+            amount: $this->extractAmount($object),
+            currency: $this->extractCurrency($object),
         );
     }
 
@@ -260,6 +262,33 @@ final class StripeGateway implements Gateway, Refundable
             ?? (is_array($object['metadata'] ?? null) ? ($object['metadata']['reference'] ?? null) : null);
 
         return is_string($reference) && $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * Stripe amounts are already in minor units across session, intent, and
+     * charge objects — the key just differs by object type.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function extractAmount(array $object): ?int
+    {
+        foreach (['amount_total', 'amount', 'amount_refunded'] as $key) {
+            if (isset($object[$key]) && is_numeric($object[$key])) {
+                return (int) $object[$key];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     */
+    private function extractCurrency(array $object): ?string
+    {
+        $currency = $object['currency'] ?? null;
+
+        return is_string($currency) && $currency !== '' ? strtoupper($currency) : null;
     }
 
     private function normalizeEventType(string $stripeType): string

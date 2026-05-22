@@ -22,6 +22,10 @@ namespace Syriable\Payments\Data;
  * different objects across events (a Stripe session id vs. a payment
  * intent id), but $reference is always the value you sent.
  *
+ * $amount (minor units) and $currency are the gateway-reported figures for
+ * the event. Always re-check them against your order before fulfilling —
+ * confirming the amount paid is the canonical payment-consistency control.
+ *
  * $payload is the full verified webhook body for cases that need the
  * detail.
  */
@@ -36,5 +40,7 @@ final readonly class WebhookEvent
         public string $paymentId,
         public array $payload = [],
         public ?string $reference = null,
+        public ?int $amount = null,
+        public ?string $currency = null,
     ) {}
 }

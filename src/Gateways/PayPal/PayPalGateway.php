@@ -212,6 +212,8 @@ final class PayPalGateway implements Gateway, Refundable
             paymentId: $paymentId,
             payload: $event,
             reference: $this->extractReference($resource),
+            amount: $this->extractAmount($resource),
+            currency: $this->extractCurrency($resource),
         );
     }
 
@@ -239,6 +241,39 @@ final class PayPalGateway implements Gateway, Refundable
         }
 
         return null;
+    }
+
+    /**
+     * PayPal reports amounts as major-unit decimal strings; normalize back to
+     * the integer minor units this package uses everywhere else.
+     *
+     * @param  array<string, mixed>  $resource
+     */
+    private function extractAmount(array $resource): ?int
+    {
+        $amount = $resource['amount'] ?? null;
+        if (! is_array($amount)) {
+            return null;
+        }
+
+        $value = $amount['value'] ?? null;
+        $currency = $amount['currency_code'] ?? null;
+        if (! is_string($value) || ! is_numeric($value) || ! is_string($currency)) {
+            return null;
+        }
+
+        return $this->toMinorUnits($value, $currency);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resource
+     */
+    private function extractCurrency(array $resource): ?string
+    {
+        $amount = $resource['amount'] ?? null;
+        $currency = is_array($amount) ? ($amount['currency_code'] ?? null) : null;
+
+        return is_string($currency) && $currency !== '' ? strtoupper($currency) : null;
     }
 
     private function mapOrderStatus(string $status): PaymentStatus
@@ -370,6 +405,23 @@ final class PayPalGateway implements Gateway, Refundable
         $fraction = abs($amount % $divisor);
 
         return sprintf("%d.%0{$exponent}d", $whole, $fraction);
+    }
+
+    /**
+     * Convert a major-unit decimal string back to integer minor units
+     * (e.g. "25.99" -> 2599). Integer math only; no floats touch the amount.
+     */
+    private function toMinorUnits(string $value, string $currency): int
+    {
+        $exponent = $this->currencyExponent($currency);
+
+        $parts = explode('.', $value, 2);
+        $whole = (int) $parts[0];
+        $fraction = $exponent === 0
+            ? 0
+            : (int) str_pad(substr($parts[1] ?? '', 0, $exponent), $exponent, '0');
+
+        return $whole * (10 ** $exponent) + $fraction;
     }
 
     /**
