@@ -118,3 +118,15 @@ public API may still change before `1.0.0` in response to real-world use.
 ## [v0.1.0](https://github.com/syriable/laravel-payments/compare/v0.1.0...v0.1.0) - 2026-05-20
 
 **Full Changelog**: https://github.com/syriable/laravel-payments/commits/v0.1.0
+
+## [v0.1.1](https://github.com/syriable/laravel-payments/compare/v0.1.1...v0.1.1) - 2026-05-22
+
+### What's Changed
+
+* busy dirac 7 vto1 by @alkhatibsy in https://github.com/syriable/laravel-payments/pull/1
+
+### New Contributors
+
+* @alkhatibsy made their first contribution in https://github.com/syriable/laravel-payments/pull/1
+
+**Full Changelog**: https://github.com/syriable/laravel-payments/compare/v0.1.0...v0.1.1
