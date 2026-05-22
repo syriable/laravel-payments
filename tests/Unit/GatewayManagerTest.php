@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Illuminate\Http\Request;
-use Syriable\Payments\Contracts\Capturable;
 use Syriable\Payments\Contracts\Gateway;
 use Syriable\Payments\Contracts\Refundable;
 use Syriable\Payments\Data\Checkout;
@@ -113,6 +112,5 @@ it('does not claim capabilities a gateway lacks', function (): void {
     GatewayFacade::extend('cash', fn (): Gateway => $minimal);
 
     expect(GatewayFacade::gateway('cash'))
-        ->not->toBeInstanceOf(Refundable::class)
-        ->not->toBeInstanceOf(Capturable::class);
+        ->not->toBeInstanceOf(Refundable::class);
 });

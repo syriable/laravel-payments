@@ -260,7 +260,7 @@ class PaymobServiceProvider extends ServiceProvider
 }
 ```
 
-Your gateway class implements the `Gateway` contract — and, optionally, `Refundable` and/or `Capturable`:
+Your gateway class implements the `Gateway` contract — and, optionally, `Refundable`:
 
 ```php
 use Syriable\Payments\Contracts\Gateway;
@@ -270,6 +270,7 @@ final class PaymobGateway implements Gateway, Refundable
 {
     public function name(): string { /* ... */ }
     public function checkout(Checkout $checkout): PaymentResult { /* ... */ }
+    public function retrieve(string $paymentId): PaymentResult { /* ... */ }
     public function webhook(Request $request): WebhookEvent { /* ... */ }
     public function refund(string $paymentId, ?int $amount = null): PaymentResult { /* ... */ }
 }
@@ -328,7 +329,7 @@ return [
 
 ```
 src/
-├── Contracts/      Gateway, Refundable, Capturable
+├── Contracts/      Gateway, Refundable
 ├── Data/           Checkout, PaymentResult, WebhookEvent  (readonly DTOs)
 ├── Enums/          PaymentStatus
 ├── Events/         PaymentSucceeded, PaymentFailed, PaymentRefunded

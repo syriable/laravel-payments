@@ -17,9 +17,9 @@ use Syriable\Payments\Data\WebhookEvent;
  *  - parse and verify an incoming webhook
  *  - report its own canonical name (used by the manager + events)
  *
- * Refunds, captures, and other optional capabilities are expressed as
- * separate interfaces (see Refundable, Capturable) so that gateways
- * advertise capabilities through the type system, not through booleans.
+ * Optional capabilities (e.g. refunds) are expressed as separate
+ * interfaces (see Refundable) so that gateways advertise capabilities
+ * through the type system, not through booleans.
  */
 interface Gateway
 {

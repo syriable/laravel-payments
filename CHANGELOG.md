@@ -45,6 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dispatch match exhaustive. Compare against the enum (the original gateway
   event name remains in `$payload`).
 
+### Removed
+
+- The `Capturable` contract (and `UnsupportedFeature::notCapturable`). It was
+  implemented only by the test fake — no built-in gateway honored it and
+  checkout always captures immediately — so it was a test/prod fidelity trap.
+  Authorize-then-capture can return later as a complete feature.
+
 ### Fixed
 
 - Stripe webhooks now carry the checkout reference on `payment_intent.*`
