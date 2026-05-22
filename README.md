@@ -195,8 +195,14 @@ Event::listen(PaymentSucceeded::class, function (PaymentSucceeded $event) {
 ```
 
 Events: `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`. Each carries a
-normalized `WebhookEvent` with `$gateway`, `$type`, `$paymentId`, and the full
-verified `$payload`.
+normalized `WebhookEvent` with `$gateway`, `$type`, `$paymentId`, `$reference`,
+`$amount`, `$currency`, `$eventId`, and the full verified `$payload`.
+
+The controller verifies the signature, drops duplicates, and acknowledges
+immediately; the events are dispatched from a queued `ProcessWebhookEvent` job
+so a slow listener can't make the gateway time out and retry. Point it at a
+real queue with `webhook.connection` / `webhook.queue` (defaults to the
+application's queue).
 
 Invalid signatures return `403` and dispatch nothing. Unknown gateways return
 `404`.

@@ -8,12 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Syriable\Payments\Data\WebhookEvent;
-use Syriable\Payments\Events\PaymentFailed;
-use Syriable\Payments\Events\PaymentRefunded;
-use Syriable\Payments\Events\PaymentSucceeded;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\GatewayManager;
+use Syriable\Payments\Jobs\ProcessWebhookEvent;
 
 /**
  * The package's single webhook entrypoint.
@@ -51,12 +49,13 @@ final class WebhookController
             return new Response('OK', 200);
         }
 
-        match (true) {
-            str_ends_with($event->type, '.succeeded') => PaymentSucceeded::dispatch($event),
-            str_ends_with($event->type, '.failed') => PaymentFailed::dispatch($event),
-            str_ends_with($event->type, '.refunded') => PaymentRefunded::dispatch($event),
-            default => null,
-        };
+        // Acknowledge fast; do the business processing off the request cycle.
+        $connection = config('payment-gateways.webhook.connection');
+        $queue = config('payment-gateways.webhook.queue');
+
+        ProcessWebhookEvent::dispatch($event)
+            ->onConnection(is_string($connection) ? $connection : null)
+            ->onQueue(is_string($queue) ? $queue : null);
 
         return new Response('OK', 200);
     }

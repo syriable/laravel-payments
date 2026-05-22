@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inbound idempotency: `WebhookEvent::$eventId` plus webhook-controller dedup
   (`webhook.idempotency_ttl` config) drops redelivered duplicates before
   dispatching events.
+- Queued webhook processing: the controller acknowledges immediately and
+  dispatches payment events from a `ProcessWebhookEvent` job, configurable via
+  `webhook.connection` / `webhook.queue`, so slow listeners can't trigger
+  gateway retries.
 
 ### Fixed
 

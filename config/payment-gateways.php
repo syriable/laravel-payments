@@ -41,6 +41,11 @@ return [
         // How long (seconds) a processed webhook id is remembered so
         // redelivered duplicates are dropped before dispatching.
         'idempotency_ttl' => 86400,
+
+        // Queue connection/name for off-request webhook processing. Leave
+        // null to use the application defaults; the request always acks fast.
+        'connection' => env('PAYMENT_WEBHOOK_QUEUE_CONNECTION'),
+        'queue' => env('PAYMENT_WEBHOOK_QUEUE'),
     ],
 
     /*
