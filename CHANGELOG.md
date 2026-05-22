@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/syriable/laravel-payments/compare/v0.1.0...HEAD)
 
+### Added
+
+- `Gateway::retrieve($paymentId)` on the gateway contract and both built-in
+  drivers — pulls the authoritative payment state from the gateway so orders
+  stuck in a non-final state can be reconciled when a webhook is missed.
+
 ## [0.1.0](https://github.com/syriable/laravel-payments/releases/tag/v0.1.0) - 2026-05-20
 
 First public release. The `0.x` series is functional and tested, but the

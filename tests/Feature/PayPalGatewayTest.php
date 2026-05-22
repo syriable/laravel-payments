@@ -98,6 +98,22 @@ it('issues a refund against a capture id', function (): void {
         ->and($result->status)->toBe(PaymentStatus::Refunded);
 });
 
+it('retrieves an order and maps a completed status to paid', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api-m.sandbox.paypal.com/v1/oauth2/token' => $http->response(['access_token' => 't'], 200),
+        'api-m.sandbox.paypal.com/v2/checkout/orders/ORDER-123' => $http->response([
+            'id' => 'ORDER-123',
+            'status' => 'COMPLETED',
+        ], 200),
+    ]);
+
+    $result = (new PayPalGateway(paypalConfig(), $http))->retrieve('ORDER-123');
+
+    expect($result->id)->toBe('ORDER-123')
+        ->and($result->status)->toBe(PaymentStatus::Paid);
+});
+
 it('verifies a webhook by calling paypal verification endpoint', function (): void {
     $http = new HttpFactory;
     $http->fake([

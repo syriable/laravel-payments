@@ -132,6 +132,23 @@ $result->raw;           // full untouched gateway response
 > ]);
 > ```
 
+### Reconciliation
+
+Webhooks can be lost (downtime, deploys, secret rotation). `retrieve()` pulls
+the authoritative state straight from the gateway, so you can reconcile orders
+stuck in a non-final state:
+
+```php
+$result = Gateway::driver('stripe')->retrieve($order->gateway_payment_id);
+
+if ($result->status === PaymentStatus::Paid) {
+    $order->markPaid();
+}
+```
+
+Run it from a scheduled command over your own `Pending` orders — the package
+stores nothing, so the schedule and the query are yours.
+
 ### Refunds
 
 Refunds are an opt-in capability. Check for it with `instanceof` — the type system tells you whether a gateway supports it:

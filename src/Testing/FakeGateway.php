@@ -31,6 +31,9 @@ final class FakeGateway implements Capturable, Gateway, Refundable
     /** @var list<array{paymentId: string, amount: int|null}> */
     public array $captures = [];
 
+    /** @var list<string> */
+    public array $retrievals = [];
+
     public function __construct(private readonly string $name = 'fake') {}
 
     public function name(): string
@@ -47,6 +50,17 @@ final class FakeGateway implements Capturable, Gateway, Refundable
             status: PaymentStatus::Pending,
             redirectUrl: $checkout->successUrl,
             raw: ['fake' => true],
+        );
+    }
+
+    public function retrieve(string $paymentId): PaymentResult
+    {
+        $this->retrievals[] = $paymentId;
+
+        return new PaymentResult(
+            id: $paymentId,
+            status: PaymentStatus::Paid,
+            raw: ['fake' => true, 'payment_id' => $paymentId],
         );
     }
 

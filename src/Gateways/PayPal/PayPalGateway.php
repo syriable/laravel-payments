@@ -105,6 +105,32 @@ final class PayPalGateway implements Gateway, Refundable
         );
     }
 
+    public function retrieve(string $paymentId): PaymentResult
+    {
+        // $paymentId is the order id returned at checkout.
+        $response = $this->authedClient()
+            ->get($this->baseUrl().'/v2/checkout/orders/'.$paymentId);
+
+        try {
+            $response->throw();
+        } catch (RequestException $exception) {
+            throw PaymentFailed::fromGateway(
+                self::NAME,
+                'Failed to retrieve order: '.$exception->getMessage(),
+                (array) $response->json(),
+            );
+        }
+
+        /** @var array<string, mixed> $order */
+        $order = (array) $response->json();
+
+        return new PaymentResult(
+            id: (string) ($order['id'] ?? $paymentId),
+            status: $this->mapOrderStatus((string) ($order['status'] ?? '')),
+            raw: $order,
+        );
+    }
+
     public function refund(string $paymentId, ?int $amount = null): PaymentResult
     {
         // $paymentId here is the capture ID (per PayPal's refund endpoint).
@@ -186,6 +212,15 @@ final class PayPalGateway implements Gateway, Refundable
             paymentId: $paymentId,
             payload: $event,
         );
+    }
+
+    private function mapOrderStatus(string $status): PaymentStatus
+    {
+        return match ($status) {
+            'COMPLETED' => PaymentStatus::Paid,
+            'VOIDED' => PaymentStatus::Failed,
+            default => PaymentStatus::Pending,
+        };
     }
 
     private function normalizeEventType(string $paypalType): string

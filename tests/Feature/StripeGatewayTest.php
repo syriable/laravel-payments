@@ -73,6 +73,37 @@ it('issues a refund', function (): void {
         ->and($result->status)->toBe(PaymentStatus::Refunded);
 });
 
+it('retrieves a checkout session and maps a paid status', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/checkout/sessions/cs_test_123' => $http->response([
+            'id' => 'cs_test_123',
+            'status' => 'complete',
+            'payment_status' => 'paid',
+        ], 200),
+    ]);
+
+    $result = stripeGateway($http)->retrieve('cs_test_123');
+
+    expect($result->id)->toBe('cs_test_123')
+        ->and($result->status)->toBe(PaymentStatus::Paid);
+});
+
+it('retrieves a payment intent by id', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/payment_intents/pi_test_9' => $http->response([
+            'id' => 'pi_test_9',
+            'status' => 'succeeded',
+        ], 200),
+    ]);
+
+    $result = stripeGateway($http)->retrieve('pi_test_9');
+
+    expect($result->id)->toBe('pi_test_9')
+        ->and($result->status)->toBe(PaymentStatus::Paid);
+});
+
 it('verifies a valid webhook signature and normalizes the event', function (): void {
     $secret = 'whsec_test_x';
     $body = json_encode([

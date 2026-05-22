@@ -64,6 +64,11 @@ it('registers a custom gateway through extend()', function (): void {
             );
         }
 
+        public function retrieve(string $paymentId): PaymentResult
+        {
+            return new PaymentResult($paymentId, PaymentStatus::Paid);
+        }
+
         public function webhook(Request $request): WebhookEvent
         {
             return new WebhookEvent('paymob', 'payment.succeeded', 'paymob_1');
@@ -91,6 +96,11 @@ it('does not claim capabilities a gateway lacks', function (): void {
         public function checkout(Checkout $checkout): PaymentResult
         {
             return new PaymentResult('cash_1', PaymentStatus::Pending);
+        }
+
+        public function retrieve(string $paymentId): PaymentResult
+        {
+            return new PaymentResult($paymentId, PaymentStatus::Paid);
         }
 
         public function webhook(Request $request): WebhookEvent

@@ -38,6 +38,14 @@ interface Gateway
     public function checkout(Checkout $checkout): PaymentResult;
 
     /**
+     * Fetch the current state of a payment straight from the gateway.
+     *
+     * Webhooks are best-effort and can be lost; this is the authoritative
+     * pull used to reconcile orders stuck in a non-final state.
+     */
+    public function retrieve(string $paymentId): PaymentResult;
+
+    /**
      * Verify and parse an incoming webhook request.
      *
      * Implementations MUST verify the signature before parsing. On

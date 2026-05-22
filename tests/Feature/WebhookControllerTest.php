@@ -89,6 +89,11 @@ it('dispatches PaymentRefunded for a refund webhook from a custom gateway', func
             return new PaymentResult('d1', PaymentStatus::Pending);
         }
 
+        public function retrieve(string $paymentId): PaymentResult
+        {
+            return new PaymentResult($paymentId, PaymentStatus::Paid);
+        }
+
         public function webhook(Request $request): WebhookEvent
         {
             return new WebhookEvent('demo', 'payment.refunded', 'd1');

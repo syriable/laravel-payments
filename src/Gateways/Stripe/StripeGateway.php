@@ -102,6 +102,36 @@ final class StripeGateway implements Gateway, Refundable
         );
     }
 
+    public function retrieve(string $paymentId): PaymentResult
+    {
+        // Checkout sessions (cs_) and payment intents (pi_) live at different
+        // endpoints; pick the right one from the id prefix.
+        $endpoint = str_starts_with($paymentId, 'cs_')
+            ? self::API_BASE.'/checkout/sessions/'.$paymentId
+            : self::API_BASE.'/payment_intents/'.$paymentId;
+
+        $response = $this->client()->get($endpoint);
+
+        try {
+            $response->throw();
+        } catch (RequestException $exception) {
+            throw PaymentFailed::fromGateway(
+                self::NAME,
+                'Failed to retrieve payment: '.$exception->getMessage(),
+                (array) $response->json(),
+            );
+        }
+
+        /** @var array<string, mixed> $data */
+        $data = (array) $response->json();
+
+        return new PaymentResult(
+            id: (string) ($data['id'] ?? $paymentId),
+            status: $this->mapStatus($data),
+            raw: $data,
+        );
+    }
+
     public function refund(string $paymentId, ?int $amount = null): PaymentResult
     {
         $payload = ['payment_intent' => $paymentId];
@@ -195,6 +225,23 @@ final class StripeGateway implements Gateway, Refundable
         }
 
         throw InvalidWebhookSignature::forGateway(self::NAME);
+    }
+
+    /**
+     * Map a Stripe session/payment-intent payload to a canonical status.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function mapStatus(array $data): PaymentStatus
+    {
+        $status = (string) ($data['status'] ?? '');
+        $paymentStatus = (string) ($data['payment_status'] ?? '');
+
+        return match (true) {
+            $status === 'succeeded', $status === 'complete', $paymentStatus === 'paid' => PaymentStatus::Paid,
+            $status === 'canceled', $status === 'expired' => PaymentStatus::Failed,
+            default => PaymentStatus::Pending,
+        };
     }
 
     private function normalizeEventType(string $stripeType): string
