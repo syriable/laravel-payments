@@ -117,6 +117,22 @@ it('issues a refund against a capture id', function (): void {
         ->and($result->status)->toBe(PaymentStatus::Refunded);
 });
 
+it('caches the oauth token across gateway instances', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api-m.sandbox.paypal.com/v1/oauth2/token' => $http->response(['access_token' => 't', 'expires_in' => 3600], 200),
+        'api-m.sandbox.paypal.com/v2/checkout/orders/*' => $http->response(['id' => 'O-1', 'status' => 'COMPLETED'], 200),
+    ]);
+
+    // Separate instances (as the manager builds per request) share the cache.
+    (new PayPalGateway(paypalConfig(), $http))->retrieve('O-1');
+    (new PayPalGateway(paypalConfig(), $http))->retrieve('O-1');
+
+    $tokenCalls = $http->recorded(fn ($request): bool => str_contains($request->url(), '/oauth2/token'));
+
+    expect($tokenCalls)->toHaveCount(1);
+});
+
 it('retrieves an order and maps a completed status to paid', function (): void {
     $http = new HttpFactory;
     $http->fake([

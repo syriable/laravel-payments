@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- PayPal OAuth tokens are now cached (until just before `expires_in`) and
+  reused across requests, instead of a fresh token round-trip on every call.
 - `PaymentStatus` gained `RequiresAction`, `Processing`, `Canceled`, and
   `PartiallyRefunded` so SCA/3DS and cancellation flows are representable; the
   drivers now map these on `retrieve()`.

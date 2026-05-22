@@ -8,6 +8,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Syriable\Payments\Contracts\Gateway;
 use Syriable\Payments\Contracts\Refundable;
@@ -345,6 +346,28 @@ final class PayPalGateway implements Gateway, Refundable
         $clientId = $this->requiredConfig('client_id');
         $clientSecret = $this->requiredConfig('client_secret');
 
+        // Reuse the token across requests until just before it expires, instead
+        // of paying for a fresh OAuth round-trip on every call.
+        $cacheKey = 'payment-gateways:paypal:token:'.md5($this->baseUrl().'|'.$clientId);
+
+        $cached = Cache::get($cacheKey);
+        if (is_string($cached) && $cached !== '') {
+            return $this->accessToken = $cached;
+        }
+
+        [$token, $expiresIn] = $this->requestAccessToken($clientId, $clientSecret);
+
+        // Refresh a minute early so we never use a token mid-expiry.
+        Cache::put($cacheKey, $token, max(60, $expiresIn - 60));
+
+        return $this->accessToken = $token;
+    }
+
+    /**
+     * @return array{0: string, 1: int} token and its lifetime in seconds
+     */
+    private function requestAccessToken(string $clientId, string $clientSecret): array
+    {
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
@@ -372,7 +395,12 @@ final class PayPalGateway implements Gateway, Refundable
             throw PaymentFailed::fromGateway(self::NAME, 'OAuth response missing access_token.', $body);
         }
 
-        return $this->accessToken = $body['access_token'];
+        // PayPal tokens last ~9h; fall back to that if the field is absent.
+        $expiresIn = isset($body['expires_in']) && is_numeric($body['expires_in'])
+            ? (int) $body['expires_in']
+            : 32400;
+
+        return [$body['access_token'], $expiresIn];
     }
 
     private function baseUrl(): string
