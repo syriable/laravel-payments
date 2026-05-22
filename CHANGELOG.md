@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   webhook received/duplicate/invalid-signature) on a configurable channel
   (`logging.channel`). Only ids, references, and amounts are logged — never
   secrets or full payloads.
+- Outbound HTTP resilience: gateway API calls now retry transient failures
+  (connection errors, 429/5xx) with exponential backoff, configurable via the
+  `http` config (`timeout`, `retry.times`, `retry.sleep_ms`). Retries are safe
+  because checkouts carry idempotency keys; terminal errors (declines, bad
+  requests) are not retried.
 
 ### Changed
 

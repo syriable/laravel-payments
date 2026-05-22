@@ -20,6 +20,7 @@ use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
+use Syriable\Payments\Gateways\Concerns\ResilientHttp;
 use Syriable\Payments\Support\PaymentLog;
 
 /**
@@ -34,6 +35,8 @@ use Syriable\Payments\Support\PaymentLog;
  */
 final class PayPalGateway implements Gateway, Refundable
 {
+    use ResilientHttp;
+
     private const NAME = 'paypal';
 
     private const LIVE_BASE = 'https://api-m.paypal.com';
@@ -346,11 +349,9 @@ final class PayPalGateway implements Gateway, Refundable
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
-        return $factory
-            ->withToken($this->accessToken())
-            ->acceptJson()
-            ->asJson()
-            ->timeout(30);
+        return $this->applyResilience(
+            $factory->withToken($this->accessToken())->acceptJson()->asJson()
+        );
     }
 
     private function accessToken(): string
@@ -387,12 +388,9 @@ final class PayPalGateway implements Gateway, Refundable
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
-        $response = $factory
-            ->withBasicAuth($clientId, $clientSecret)
-            ->asForm()
-            ->acceptJson()
-            ->timeout(30)
-            ->post($this->baseUrl().'/v1/oauth2/token', ['grant_type' => 'client_credentials']);
+        $response = $this->applyResilience(
+            $factory->withBasicAuth($clientId, $clientSecret)->asForm()->acceptJson()
+        )->post($this->baseUrl().'/v1/oauth2/token', ['grant_type' => 'client_credentials']);
 
         try {
             $response->throw();

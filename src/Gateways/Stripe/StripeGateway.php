@@ -19,6 +19,7 @@ use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
 use Syriable\Payments\Exceptions\PaymentFailed;
+use Syriable\Payments\Gateways\Concerns\ResilientHttp;
 use Syriable\Payments\Support\PaymentLog;
 
 /**
@@ -33,6 +34,8 @@ use Syriable\Payments\Support\PaymentLog;
  */
 final class StripeGateway implements Gateway, Refundable
 {
+    use ResilientHttp;
+
     private const API_BASE = 'https://api.stripe.com/v1';
 
     private const NAME = 'stripe';
@@ -331,10 +334,9 @@ final class StripeGateway implements Gateway, Refundable
         $factory = $this->http ?? Http::getFacadeRoot();
         assert($factory instanceof HttpFactory);
 
-        return $factory
-            ->withToken($secret)
-            ->acceptJson()
-            ->timeout(30);
+        return $this->applyResilience(
+            $factory->withToken($secret)->acceptJson()
+        );
     }
 
     private function requiredConfig(string $key): string

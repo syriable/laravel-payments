@@ -63,6 +63,41 @@ it('sends an idempotency key derived from the reference', function (): void {
     });
 });
 
+it('retries a transient error and then succeeds', function (): void {
+    config()->set('payment-gateways.http.retry.sleep_ms', 0);
+
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/checkout/sessions' => $http->sequence()
+            ->pushStatus(503)
+            ->push(['id' => 'cs_ok', 'url' => 'https://x.test'], 200),
+    ]);
+
+    $result = stripeGateway($http)->checkout(stripeCheckout());
+
+    expect($result->id)->toBe('cs_ok');
+    $http->assertSentCount(2);
+});
+
+it('does not retry a terminal client error', function (): void {
+    config()->set('payment-gateways.http.retry.sleep_ms', 0);
+
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/checkout/sessions' => $http->sequence()
+            ->push(['error' => ['message' => 'bad']], 400)
+            ->push(['id' => 'cs_should_not_be_used', 'url' => 'https://x.test'], 200),
+    ]);
+
+    try {
+        stripeGateway($http)->checkout(stripeCheckout());
+    } catch (PaymentFailed) {
+        // expected
+    }
+
+    $http->assertSentCount(1);
+});
+
 it('throws PaymentFailed when stripe rejects the checkout', function (): void {
     $http = new HttpFactory;
     $http->fake([

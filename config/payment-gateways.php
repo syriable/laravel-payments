@@ -33,6 +33,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Outbound HTTP
+    |--------------------------------------------------------------------------
+    |
+    | Timeout (seconds) and transient-error retry policy for gateway API
+    | calls. Retries fire on connection errors and 429/5xx responses with
+    | exponential backoff; writes are safe to retry because checkouts carry
+    | idempotency keys. "times" is the total number of attempts.
+    |
+    */
+
+    'http' => [
+        'timeout' => 30,
+        'retry' => [
+            'times' => 3,
+            'sleep_ms' => 200,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Webhook Route
     |--------------------------------------------------------------------------
     |
