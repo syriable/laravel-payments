@@ -141,9 +141,17 @@ final class PayPalGateway implements Gateway, Refundable
         /** @var array<string, mixed> $order */
         $order = (array) $response->json();
 
+        // On an order the amount lives under the first purchase unit, not at
+        // the top level as it does on a webhook resource.
+        $units = $order['purchase_units'] ?? null;
+        $unit = is_array($units) && is_array($units[0] ?? null) ? $units[0] : [];
+
         return new PaymentResult(
             id: (string) ($order['id'] ?? $paymentId),
             status: $this->mapOrderStatus((string) ($order['status'] ?? '')),
+            reference: $this->extractReference($order),
+            amount: $this->extractAmount($unit),
+            currency: $this->extractCurrency($unit),
             raw: $order,
         );
     }

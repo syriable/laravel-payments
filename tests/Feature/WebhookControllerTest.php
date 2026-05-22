@@ -14,6 +14,7 @@ use Syriable\Payments\Events\PaymentFailed;
 use Syriable\Payments\Events\PaymentRefunded;
 use Syriable\Payments\Events\PaymentSucceeded;
 use Syriable\Payments\Facades\Gateway;
+use Syriable\Payments\Models\WebhookCall;
 
 it('registers the webhook route', function (): void {
     expect(route('payment-gateways.webhook', ['gateway' => 'stripe']))
@@ -45,6 +46,32 @@ it('dispatches PaymentSucceeded for a valid stripe webhook', function (): void {
         static fn (PaymentSucceeded $e): bool => $e->event->paymentId === 'cs_test_777'
             && $e->event->gateway === 'stripe',
     );
+});
+
+it('persists the verified webhook before acknowledging', function (): void {
+    Event::fake([PaymentSucceeded::class]);
+
+    $secret = 'whsec_test_dummy';
+    $body = json_encode([
+        'id' => 'evt_persist_1',
+        'type' => 'checkout.session.completed',
+        'data' => ['object' => ['id' => 'cs_persist_1', 'client_reference_id' => 'order_77', 'amount_total' => 4200, 'currency' => 'usd']],
+    ]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+
+    $this->call(
+        'POST',
+        '/payment-gateways/webhook/stripe',
+        server: ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}", 'CONTENT_TYPE' => 'application/json'],
+        content: $body,
+    )->assertOk();
+
+    $call = WebhookCall::firstOrFail();
+    expect($call->gateway)->toBe('stripe')
+        ->and($call->event_id)->toBe('evt_persist_1')
+        ->and($call->reference)->toBe('order_77')
+        ->and($call->amount)->toBe(4200);
 });
 
 it('dispatches a redelivered webhook only once', function (): void {

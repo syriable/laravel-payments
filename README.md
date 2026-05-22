@@ -18,7 +18,7 @@
 
 A lightweight Laravel package for accepting payments through **Stripe**, **PayPal**, and an open ecosystem of community gateway plugins.
 
-It does one thing well: it unifies payment gateways behind a small, Laravel-native API. It is **not** an accounting system, a subscription engine, or a billing platform — it never touches your database, and it never forces a schema on you.
+It does one thing well: it unifies payment gateways behind a small, Laravel-native API. It is **not** an accounting system, a subscription engine, or a billing platform. It ships a single table to make webhook delivery durable, and otherwise stays out of your schema — it never models your domain for you.
 
 ```php
 use Syriable\Payments\Data\Checkout;
@@ -59,6 +59,17 @@ The service provider and the `Gateway` facade are auto-discovered. Publish the c
 ```bash
 php artisan vendor:publish --tag="laravel-payments-config"
 ```
+
+Verified webhooks are persisted before processing (see [Webhooks](#webhooks)),
+so publish and run the migration:
+
+```bash
+php artisan vendor:publish --tag="laravel-payments-migrations"
+php artisan migrate
+```
+
+Prefer not to store webhooks? Set `webhook.store` to
+`Syriable\Payments\Store\NullWebhookStore::class` and skip the migration.
 
 Then set your credentials in `.env`:
 
@@ -112,6 +123,9 @@ return redirect($result->redirectUrl);
 $result->id;            // gateway's payment/session id
 $result->status;        // PaymentStatus enum (Pending, RequiresAction, Processing, Paid, Failed, Canceled, PartiallyRefunded, Refunded)
 $result->redirectUrl;   // hosted-checkout URL, if any
+$result->reference;     // your checkout reference, when the gateway echoes it (e.g. on retrieve())
+$result->amount;        // gateway-reported amount in minor units, when available
+$result->currency;      // gateway-reported ISO 4217 currency, when available
 $result->raw;           // full untouched gateway response
 ```
 
@@ -146,8 +160,28 @@ if ($result->status === PaymentStatus::Paid) {
 }
 ```
 
-Run it from a scheduled command over your own `Pending` orders — the package
-stores nothing, so the schedule and the query are yours.
+`retrieve()` also returns `$reference`, `$amount`, and `$currency` when the
+gateway exposes them, so you can verify a reconciled payment exactly as you
+would a webhook.
+
+For the common case — re-emit the canonical event so your existing webhook
+listeners fire — use the `ReconcilePayment` job or the command:
+
+```bash
+php artisan payment:reconcile stripe pi_xxx          # queued (default)
+php artisan payment:reconcile stripe pi_xxx --sync   # inline
+```
+
+```php
+use Syriable\Payments\Jobs\ReconcilePayment;
+
+ReconcilePayment::dispatch('stripe', $order->gateway_payment_id);
+```
+
+The package doesn't own your orders table, so iterate your own non-final
+orders on a schedule and reconcile each. Terminal states re-dispatch
+`PaymentSucceeded` / `PaymentFailed` / `PaymentRefunded`; non-terminal states
+emit nothing.
 
 ### Refunds
 
@@ -198,11 +232,18 @@ Events: `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`. Each carries a
 normalized `WebhookEvent` with `$gateway`, `$type`, `$paymentId`, `$reference`,
 `$amount`, `$currency`, `$eventId`, and the full verified `$payload`.
 
-The controller verifies the signature, drops duplicates, and acknowledges
-immediately; the events are dispatched from a queued `ProcessWebhookEvent` job
-so a slow listener can't make the gateway time out and retry. Point it at a
-real queue with `webhook.connection` / `webhook.queue` (defaults to the
-application's queue).
+The controller verifies the signature, persists the event, drops duplicates,
+and acknowledges immediately; the events are dispatched from a queued
+`ProcessWebhookEvent` job so a slow listener can't make the gateway time out
+and retry. Point it at a real queue with `webhook.connection` /
+`webhook.queue` (defaults to the application's queue).
+
+Verified webhooks are persisted to the `payment_webhook_calls` table before
+processing (status `pending` → `processed`/`failed`), giving you a durable,
+auditable record and a place to replay from. Persistence is swappable via the
+`webhook.store` config key — the default is
+`Store\DatabaseWebhookStore`; ship your own `Contracts\WebhookStore`, or use
+`Store\NullWebhookStore` to disable it.
 
 Invalid signatures return `403` and dispatch nothing. Unknown gateways return
 `404`.
@@ -308,6 +349,7 @@ return [
         'enabled'    => true,
         'prefix'     => 'payment-gateways',
         'middleware' => ['api'],
+        'store'      => Syriable\Payments\Store\DatabaseWebhookStore::class,
     ],
 
     'gateways' => [
@@ -329,15 +371,21 @@ return [
 
 ```
 src/
-├── Contracts/      Gateway, Refundable
+├── Console/        ReconcilePaymentCommand
+├── Contracts/      Gateway, Refundable, WebhookStore
 ├── Data/           Checkout, PaymentResult, WebhookEvent  (readonly DTOs)
-├── Enums/          PaymentStatus
+├── Enums/          PaymentStatus, WebhookEventType, WebhookCallStatus
 ├── Events/         PaymentSucceeded, PaymentFailed, PaymentRefunded
 ├── Exceptions/     PaymentException + 4 specific subclasses
 ├── Gateways/
+│   ├── Concerns/   ResilientHttp
 │   ├── Stripe/     StripeGateway
 │   └── PayPal/     PayPalGateway
 ├── Http/           WebhookController
+├── Jobs/           ProcessWebhookEvent, ReconcilePayment
+├── Models/         WebhookCall
+├── Store/          DatabaseWebhookStore, NullWebhookStore
+├── Support/        PaymentLog
 ├── Testing/        FakeGateway, FakeGatewayManager
 ├── Facades/        Gateway
 ├── GatewayManager.php

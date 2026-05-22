@@ -30,6 +30,12 @@ abstract class TestCase extends Orchestra
         ];
     }
 
+    protected function defineDatabaseMigrations(): void
+    {
+        $migration = include __DIR__.'/../database/migrations/create_payment_webhook_calls_table.php.stub';
+        $migration->up();
+    }
+
     protected function defineEnvironment($app): void
     {
         $app['config']->set('payment-gateways.default', 'stripe');

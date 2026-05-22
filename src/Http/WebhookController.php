@@ -7,6 +7,7 @@ namespace Syriable\Payments\Http;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
+use Syriable\Payments\Contracts\WebhookStore;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Exceptions\GatewayNotConfigured;
 use Syriable\Payments\Exceptions\InvalidWebhookSignature;
@@ -23,15 +24,14 @@ use Syriable\Payments\Support\PaymentLog;
  *   1. Resolve the named gateway driver via GatewayManager.
  *   2. Hand the request to the driver's webhook() method, which
  *      verifies the signature and returns a normalized WebhookEvent.
- *   3. Dispatch one of the canonical events (PaymentSucceeded /
- *      PaymentFailed / PaymentRefunded). Consumers listen to these
- *      in their own application code.
- *
- * The package never touches the database. Storage is the consumer's job.
+ *   3. Persist the verified event through the configured WebhookStore.
+ *   4. Acknowledge the gateway immediately, then process the event from a
+ *      queued job that dispatches one of the canonical events
+ *      (PaymentSucceeded / PaymentFailed / PaymentRefunded).
  */
 final class WebhookController
 {
-    public function __invoke(Request $request, string $gateway, GatewayManager $manager): Response
+    public function __invoke(Request $request, string $gateway, GatewayManager $manager, WebhookStore $store): Response
     {
         try {
             $driver = $manager->gateway($gateway);
@@ -46,6 +46,10 @@ final class WebhookController
 
             return new Response('Invalid signature', 403);
         }
+
+        // Persist before claiming the dedup key: if storage fails we 500
+        // here, the key is never claimed, and the gateway's retry isn't lost.
+        $storeId = $store->store($event);
 
         // Gateways legitimately redeliver; drop duplicates before dispatching.
         if ($this->alreadyProcessed($event)) {
@@ -69,7 +73,7 @@ final class WebhookController
         $connection = config('payment-gateways.webhook.connection');
         $queue = config('payment-gateways.webhook.queue');
 
-        ProcessWebhookEvent::dispatch($event)
+        ProcessWebhookEvent::dispatch($event, $storeId)
             ->onConnection(is_string($connection) ? $connection : null)
             ->onQueue(is_string($queue) ? $queue : null);
 

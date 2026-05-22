@@ -147,6 +147,9 @@ final class StripeGateway implements Gateway, Refundable
         return new PaymentResult(
             id: (string) ($data['id'] ?? $paymentId),
             status: $this->mapStatus($data),
+            reference: $this->extractReference($data),
+            amount: $this->extractAmount($data),
+            currency: $this->extractCurrency($data),
             raw: $data,
         );
     }

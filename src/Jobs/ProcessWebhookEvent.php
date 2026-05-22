@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Syriable\Payments\Contracts\WebhookStore;
 use Syriable\Payments\Data\WebhookEvent;
 use Syriable\Payments\Enums\WebhookEventType;
 use Syriable\Payments\Events\PaymentFailed;
@@ -27,15 +28,30 @@ final class ProcessWebhookEvent implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    public function __construct(public readonly WebhookEvent $event) {}
+    public function __construct(
+        public readonly WebhookEvent $event,
+        public readonly ?string $storeId = null,
+    ) {}
 
-    public function handle(): void
+    public function handle(WebhookStore $store): void
     {
-        match ($this->event->type) {
-            WebhookEventType::Succeeded => PaymentSucceeded::dispatch($this->event),
-            WebhookEventType::Failed => PaymentFailed::dispatch($this->event),
-            WebhookEventType::Refunded => PaymentRefunded::dispatch($this->event),
-            WebhookEventType::Unknown => null,
-        };
+        try {
+            match ($this->event->type) {
+                WebhookEventType::Succeeded => PaymentSucceeded::dispatch($this->event),
+                WebhookEventType::Failed => PaymentFailed::dispatch($this->event),
+                WebhookEventType::Refunded => PaymentRefunded::dispatch($this->event),
+                WebhookEventType::Unknown => null,
+            };
+        } catch (\Throwable $e) {
+            if ($this->storeId !== null) {
+                $store->markFailed($this->storeId, $e->getMessage());
+            }
+
+            throw $e;
+        }
+
+        if ($this->storeId !== null) {
+            $store->markProcessed($this->storeId);
+        }
     }
 }

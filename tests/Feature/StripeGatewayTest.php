@@ -140,6 +140,26 @@ it('retrieves a checkout session and maps a paid status', function (): void {
         ->and($result->status)->toBe(PaymentStatus::Paid);
 });
 
+it('exposes reference, amount and currency on retrieve', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/checkout/sessions/cs_ref' => $http->response([
+            'id' => 'cs_ref',
+            'status' => 'complete',
+            'payment_status' => 'paid',
+            'client_reference_id' => 'order_99',
+            'amount_total' => 2500,
+            'currency' => 'usd',
+        ], 200),
+    ]);
+
+    $result = stripeGateway($http)->retrieve('cs_ref');
+
+    expect($result->reference)->toBe('order_99')
+        ->and($result->amount)->toBe(2500)
+        ->and($result->currency)->toBe('USD');
+});
+
 it('retrieves a payment intent by id', function (): void {
     $http = new HttpFactory;
     $http->fake([

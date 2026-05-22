@@ -6,6 +6,9 @@ namespace Syriable\Payments;
 
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Syriable\Payments\Console\ReconcilePaymentCommand;
+use Syriable\Payments\Contracts\WebhookStore;
+use Syriable\Payments\Store\NullWebhookStore;
 
 /**
  * The package's only service provider.
@@ -25,6 +28,8 @@ class PaymentsServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-payments')
             ->hasConfigFile('payment-gateways')
+            ->hasMigration('create_payment_webhook_calls_table')
+            ->hasCommand(ReconcilePaymentCommand::class)
             ->hasRoute('webhooks');
     }
 
@@ -33,5 +38,13 @@ class PaymentsServiceProvider extends PackageServiceProvider
         $this->app->singleton('payment-gateways', static fn ($app): GatewayManager => new GatewayManager($app));
 
         $this->app->alias('payment-gateways', GatewayManager::class);
+
+        $this->app->singleton(WebhookStore::class, static function ($app): WebhookStore {
+            $store = config('payment-gateways.webhook.store', NullWebhookStore::class);
+            $instance = $app->make(is_string($store) ? $store : NullWebhookStore::class);
+            assert($instance instanceof WebhookStore);
+
+            return $instance;
+        });
     }
 }

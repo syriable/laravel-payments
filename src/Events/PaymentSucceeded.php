@@ -9,11 +9,11 @@ use Illuminate\Queue\SerializesModels;
 use Syriable\Payments\Data\WebhookEvent;
 
 /**
- * Fired by the package's webhook controller when a verified webhook
- * resolves to a "payment.succeeded" event.
+ * Fired when a verified webhook (or a reconciliation) resolves to a
+ * "payment.succeeded" event.
  *
- * Consumers listen to this in their EventServiceProvider and mark the
- * relevant order as paid. The package itself never touches the database.
+ * Consumers listen to this in their application and mark the relevant order
+ * as paid — fulfilling the order is the consuming app's concern.
  */
 final class PaymentSucceeded
 {
