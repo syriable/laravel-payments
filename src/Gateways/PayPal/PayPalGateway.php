@@ -79,6 +79,9 @@ final class PayPalGateway implements Gateway, Refundable
         }
 
         $response = $this->authedClient()
+            // PayPal-Request-Id makes a retried create reuse the same order
+            // instead of creating a duplicate.
+            ->withHeaders(['PayPal-Request-Id' => 'checkout_'.$checkout->reference])
             ->post($this->baseUrl().'/v2/checkout/orders', $payload);
 
         try {
@@ -199,7 +202,7 @@ final class PayPalGateway implements Gateway, Refundable
             throw InvalidWebhookSignature::forGateway(self::NAME);
         }
 
-        /** @var array{event_type?: string, resource?: array<string, mixed>} $event */
+        /** @var array{id?: string, event_type?: string, resource?: array<string, mixed>} $event */
         $event = $request->json()->all();
 
         $paypalType = (string) ($event['event_type'] ?? '');
@@ -214,6 +217,7 @@ final class PayPalGateway implements Gateway, Refundable
             reference: $this->extractReference($resource),
             amount: $this->extractAmount($resource),
             currency: $this->extractCurrency($resource),
+            eventId: is_string($event['id'] ?? null) ? $event['id'] : null,
         );
     }
 

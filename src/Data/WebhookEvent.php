@@ -26,6 +26,9 @@ namespace Syriable\Payments\Data;
  * the event. Always re-check them against your order before fulfilling —
  * confirming the amount paid is the canonical payment-consistency control.
  *
+ * $eventId is the gateway's unique id for this delivery, used to drop
+ * redelivered (duplicate) webhooks.
+ *
  * $payload is the full verified webhook body for cases that need the
  * detail.
  */
@@ -42,5 +45,6 @@ final readonly class WebhookEvent
         public ?string $reference = null,
         public ?int $amount = null,
         public ?string $currency = null,
+        public ?string $eventId = null,
     ) {}
 }

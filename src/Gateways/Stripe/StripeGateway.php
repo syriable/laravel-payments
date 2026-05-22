@@ -79,6 +79,9 @@ final class StripeGateway implements Gateway, Refundable
         }
 
         $response = $this->client()
+            // Idempotency-Key makes a retried request reuse the same session
+            // instead of creating a duplicate.
+            ->withHeaders(['Idempotency-Key' => 'checkout_'.$checkout->reference])
             ->asForm()
             ->post(self::API_BASE.'/checkout/sessions', $payload);
 
@@ -180,7 +183,7 @@ final class StripeGateway implements Gateway, Refundable
 
         $this->verifySignature($payload, $signatureHeader, $secret);
 
-        /** @var array{type?: string, data?: array{object?: array<string, mixed>}} $event */
+        /** @var array{id?: string, type?: string, data?: array{object?: array<string, mixed>}} $event */
         $event = (array) json_decode($payload, true);
 
         $stripeType = (string) ($event['type'] ?? '');
@@ -195,6 +198,7 @@ final class StripeGateway implements Gateway, Refundable
             reference: $this->extractReference($object),
             amount: $this->extractAmount($object),
             currency: $this->extractCurrency($object),
+            eventId: is_string($event['id'] ?? null) ? $event['id'] : null,
         );
     }
 

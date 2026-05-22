@@ -82,6 +82,24 @@ it('converts minor units to the major-unit decimal string paypal expects', funct
     'kwd three-decimal' => [12345, 'KWD', '12.345'],
 ]);
 
+it('sends a paypal request id derived from the reference', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api-m.sandbox.paypal.com/v1/oauth2/token' => $http->response(['access_token' => 't'], 200),
+        'api-m.sandbox.paypal.com/v2/checkout/orders' => $http->response(['id' => 'O-1', 'links' => []], 201),
+    ]);
+
+    (new PayPalGateway(paypalConfig(), $http))->checkout(paypalCheckout());
+
+    $http->recorded(function ($request): bool {
+        if (str_contains($request->url(), '/v2/checkout/orders')) {
+            expect($request->hasHeader('PayPal-Request-Id', 'checkout_order_pp_1'))->toBeTrue();
+        }
+
+        return true;
+    });
+});
+
 it('issues a refund against a capture id', function (): void {
     $http = new HttpFactory;
     $http->fake([

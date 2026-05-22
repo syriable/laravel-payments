@@ -46,6 +46,25 @@ it('dispatches PaymentSucceeded for a valid stripe webhook', function (): void {
     );
 });
 
+it('dispatches a redelivered webhook only once', function (): void {
+    Event::fake([PaymentSucceeded::class]);
+
+    $secret = 'whsec_test_dummy';
+    $body = json_encode([
+        'id' => 'evt_dup_1',
+        'type' => 'checkout.session.completed',
+        'data' => ['object' => ['id' => 'cs_test_777']],
+    ]);
+    $timestamp = time();
+    $signature = hash_hmac('sha256', $timestamp.'.'.$body, $secret);
+    $server = ['HTTP_STRIPE_SIGNATURE' => "t={$timestamp},v1={$signature}", 'CONTENT_TYPE' => 'application/json'];
+
+    $this->call('POST', '/payment-gateways/webhook/stripe', server: $server, content: $body)->assertOk();
+    $this->call('POST', '/payment-gateways/webhook/stripe', server: $server, content: $body)->assertOk();
+
+    Event::assertDispatchedTimes(PaymentSucceeded::class, 1);
+});
+
 it('returns 403 for a webhook with an invalid signature', function (): void {
     Event::fake([PaymentSucceeded::class, PaymentFailed::class, PaymentRefunded::class]);
 

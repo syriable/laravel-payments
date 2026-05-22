@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gateway-reported figures for the event, so listeners can verify the amount
   paid matches the order before fulfilling. PayPal's major-unit decimals are
   normalized back to integer minor units.
+- Outbound idempotency: checkout requests send an idempotency key derived from
+  the reference (`Idempotency-Key` for Stripe, `PayPal-Request-Id` for PayPal)
+  so a retried request can't create a duplicate session/order.
+- Inbound idempotency: `WebhookEvent::$eventId` plus webhook-controller dedup
+  (`webhook.idempotency_ttl` config) drops redelivered duplicates before
+  dispatching events.
 
 ### Fixed
 

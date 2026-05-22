@@ -47,6 +47,21 @@ it('creates a checkout session and returns the redirect url', function (): void 
         ->and($result->redirectUrl)->toBe('https://checkout.stripe.com/c/pay/cs_test_123');
 });
 
+it('sends an idempotency key derived from the reference', function (): void {
+    $http = new HttpFactory;
+    $http->fake([
+        'api.stripe.com/v1/checkout/sessions' => $http->response(['id' => 'cs_1', 'url' => 'https://x.test'], 200),
+    ]);
+
+    stripeGateway($http)->checkout(stripeCheckout());
+
+    $http->recorded(function ($request): bool {
+        expect($request->hasHeader('Idempotency-Key', 'checkout_order_99'))->toBeTrue();
+
+        return true;
+    });
+});
+
 it('throws PaymentFailed when stripe rejects the checkout', function (): void {
     $http = new HttpFactory;
     $http->fake([

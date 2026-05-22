@@ -37,6 +37,10 @@ return [
         'enabled' => true,
         'prefix' => env('PAYMENT_WEBHOOK_PREFIX', 'payment-gateways'),
         'middleware' => ['api'],
+
+        // How long (seconds) a processed webhook id is remembered so
+        // redelivered duplicates are dropped before dispatching.
+        'idempotency_ttl' => 86400,
     ],
 
     /*
